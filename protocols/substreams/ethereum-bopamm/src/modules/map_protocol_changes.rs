@@ -65,7 +65,7 @@ pub fn map_protocol_changes(
         &mut transaction_changes,
     );
 
-    extract_committed_quotes(&block, &config, &mut transaction_changes);
+    extract_committed_quotes(&block, &config, &components_store, &mut transaction_changes);
     extract_maker_changes(&block, &config, &components_store, &mut transaction_changes);
     extract_pause_state(&block, &config, &components_store, &mut transaction_changes);
     mark_books_updated_on_module_changes(&config, &components_store, &mut transaction_changes);
@@ -124,6 +124,7 @@ fn add_new_components(
 fn extract_committed_quotes(
     block: &eth::v2::Block,
     config: &DeploymentConfig,
+    components_store: &StoreGetProto<ProtocolComponent>,
     transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
 ) {
     for tx in block.transactions() {
@@ -140,11 +141,28 @@ fn extract_committed_quotes(
                 continue;
             }
             let transaction: Transaction = tx.into();
-            let builder = transaction_changes
-                .entry(transaction.index)
-                .or_insert_with(|| TransactionChangesBuilder::new(&transaction));
-            for (book_id, committed_ts) in updates {
+            for (caller, book_id, committed_ts) in updates {
+                // The PrioUpdateRegistry is shared across venues. Book ids are only unique per
+                // caller (the lane slot is keccak(caller, bookId)), so an update only refers to
+                // a BopAMM book when its caller is the BopAMM pricing module. Without this
+                // filter, another venue's book that happens to share a book id is attributed to
+                // BopAMM — emitting a stale override_block_timestamp or, for unknown ids, an
+                // update against a non-existent component that fails indexing.
+                if caller != config.module {
+                    continue;
+                }
+                // Defensive: only emit for a book we actually track (e.g. a book configured
+                // before the indexed range would not yet exist as a component).
+                if components_store
+                    .get_last(format!("book:{book_id}"))
+                    .is_none()
+                {
+                    continue;
+                }
                 let id = component_id(&config.settlement, book_id);
+                let builder = transaction_changes
+                    .entry(transaction.index)
+                    .or_insert_with(|| TransactionChangesBuilder::new(&transaction));
                 builder.add_entity_change(&EntityChanges {
                     component_id: id.clone(),
                     attributes: vec![Attribute {

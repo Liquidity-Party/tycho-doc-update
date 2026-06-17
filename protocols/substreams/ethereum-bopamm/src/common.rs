@@ -109,11 +109,16 @@ pub fn u64_from_word_padded(value: &[u8]) -> Option<u64> {
     }
 }
 
-/// Decodes the `(bookId, ts)` pairs committed by a registry update call.
+/// Decodes the `(caller, bookId, ts)` tuples committed by a registry update call.
 ///
-/// Returns one pair for `updateState`, one per struct for `batchUpdateStateWithSignature`,
+/// `caller` is the update's first argument: the pricing module the book belongs to. The
+/// `PrioUpdateRegistry` is shared across venues, and book ids are only unique *per caller*
+/// (the lane slot is `keccak(caller, bookId)`), so callers must filter on the BopAMM module
+/// before attributing an update to a book.
+///
+/// Returns one tuple for `updateState`, one per struct for `batchUpdateStateWithSignature`,
 /// and an empty vec for any other call or malformed calldata.
-pub fn committed_updates(input: &[u8]) -> Vec<(u64, u32)> {
+pub fn committed_updates(input: &[u8]) -> Vec<(Vec<u8>, u64, u32)> {
     let Some(selector) = input.get(0..4) else { return Vec::new() };
     let data = &input[4..];
     let Ok(selector): std::result::Result<[u8; 4], _> = selector.try_into() else {
@@ -131,7 +136,7 @@ pub fn committed_updates(input: &[u8]) -> Vec<(u64, u32)> {
 }
 
 /// `updateState(address caller, uint256 bookId, uint32 ts, uint256[] lanes)`.
-fn decode_update_state(data: &[u8]) -> Option<(u64, u32)> {
+fn decode_update_state(data: &[u8]) -> Option<(Vec<u8>, u64, u32)> {
     let types = [
         ParamType::Address,
         ParamType::Uint(256),
@@ -139,13 +144,17 @@ fn decode_update_state(data: &[u8]) -> Option<(u64, u32)> {
         ParamType::Array(Box::new(ParamType::Uint(256))),
     ];
     let tokens = ethabi::decode(&types, data).ok()?;
+    let caller = tokens.first()?.clone().into_address()?;
     let book_id = tokens.get(1)?.clone().into_uint()?;
     let ts = tokens.get(2)?.clone().into_uint()?;
-    Some((book_id.low_u64(), ts.low_u32()))
+    Some((caller.as_bytes().to_vec(), book_id.low_u64(), ts.low_u32()))
 }
 
-/// `batchUpdateStateWithSignature((address,address,uint256 bookId,uint32 ts,uint256[],bytes)[])`.
-fn decode_batch_update(data: &[u8]) -> Vec<(u64, u32)> {
+/// `batchUpdateStateWithSignature((address caller,address,uint256 bookId,uint32 ts,uint256[],bytes)[])`.
+///
+/// The first struct field is the caller (the pricing module), matching `updateState`'s caller
+/// argument. This path is unused on-chain today (every commit is a top-level `updateState`).
+fn decode_batch_update(data: &[u8]) -> Vec<(Vec<u8>, u64, u32)> {
     let entry = ParamType::Tuple(vec![
         ParamType::Address,
         ParamType::Address,
@@ -161,14 +170,17 @@ fn decode_batch_update(data: &[u8]) -> Vec<(u64, u32)> {
     let mut updates = Vec::new();
     for item in items {
         let Token::Tuple(fields) = item else { continue };
+        let caller = fields
+            .first()
+            .and_then(|t| t.clone().into_address());
         let book_id = fields
             .get(2)
             .and_then(|t| t.clone().into_uint());
         let ts = fields
             .get(3)
             .and_then(|t| t.clone().into_uint());
-        if let (Some(book_id), Some(ts)) = (book_id, ts) {
-            updates.push((book_id.low_u64(), ts.low_u32()));
+        if let (Some(caller), Some(book_id), Some(ts)) = (caller, book_id, ts) {
+            updates.push((caller.as_bytes().to_vec(), book_id.low_u64(), ts.low_u32()));
         }
     }
     updates
@@ -222,12 +234,14 @@ mod tests {
         ))
         .unwrap();
         let updates = committed_updates(&input);
-        assert_eq!(updates, vec![(0u64, 0x6a23_368f_u32)]);
+        let module = hex::decode("bc60639345dfa607d73b74e88c2d54d8b8ad7cc3").unwrap();
+        assert_eq!(updates, vec![(module, 0u64, 0x6a23_368f_u32)]);
 
         // Lock the critical invariant: the registry `bookId`, the module `assetId`, and the
         // component index are the same space. Book 0 is the WETH book (asset-config slot
         // keccak(0,3)); its component id must be the assetId-0 component.
-        let (book_id, _) = updates[0];
+        let (_, book_id, _) = &updates[0];
+        let book_id = *book_id;
         assert_eq!(
             component_id(&SETTLEMENT, book_id),
             "0xdb13ad0fcd134e9c48f2fdaea8f6751a0f5349ca000000000000000000000000"
@@ -252,7 +266,10 @@ mod tests {
         ]);
         let mut input = SEL_BATCH_UPDATE.to_vec();
         input.extend(encode(&[Token::Array(vec![entry])]));
-        assert_eq!(committed_updates(&input), vec![(1u64, 0x6a23_368f_u32)]);
+        assert_eq!(
+            committed_updates(&input),
+            vec![(vec![0x11u8; 20], 1u64, 0x6a23_368f_u32)]
+        );
     }
 
     #[test]
