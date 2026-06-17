@@ -93,17 +93,24 @@ contract BopAMMAdapter is ISwapAdapter {
         );
         IERC20(sellToken).forceApprove(address(settlement), specifiedAmount);
 
-        uint256 buyBalanceBefore = IERC20(buyToken).balanceOf(msg.sender);
+        // BopAMM is a constant-price PMM (no slippage up to the lane cap), so
+        // the settled output equals the lane quote for the input. Take the
+        // amount from `quote()` rather than a recipient balance-diff: the
+        // off-chain simulation engine does not model the swap recipient's
+        // output-token balance, so a balance-diff would read zero there. The
+        // swap is still executed so the trade reflects a settlement that
+        // actually succeeds (gate, lane size, maker inventory).
+        uint256 amountOut =
+            settlement.quote(sellToken, buyToken, specifiedAmount);
+        if (amountOut == 0) {
+            revert TooSmall(0);
+        }
         uint256 gasBefore = gasleft();
         settlement.swap(
             sellToken, buyToken, specifiedAmount, 0, block.timestamp, msg.sender
         );
         trade.gasUsed = gasBefore - gasleft();
-        trade.calculatedAmount =
-            IERC20(buyToken).balanceOf(msg.sender) - buyBalanceBefore;
-        if (trade.calculatedAmount == 0) {
-            revert TooSmall(0);
-        }
+        trade.calculatedAmount = amountOut;
         trade.price =
             _marginalPriceAfterSwap(sellToken, buyToken, specifiedAmount);
     }
