@@ -304,11 +304,12 @@ impl ProtocolSim for MetricState {
 }
 
 fn depth_max_output(bins: &[MetricDepthBin]) -> Result<Option<BigUint>, SimulationError> {
-    let mut max_output = None;
-    for bin in bins {
-        max_output = Some(bin.cumulative_volume()?);
-    }
-    Ok(max_output)
+    bins.last()
+        .map(|bin| {
+            bin.cumulative_volume()
+                .map_err(SimulationError::from)
+        })
+        .transpose()
 }
 
 fn depth_output_for_input(

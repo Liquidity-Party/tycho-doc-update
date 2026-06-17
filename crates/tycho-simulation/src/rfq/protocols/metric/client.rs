@@ -1,7 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     str::FromStr,
-    sync::OnceLock,
+    sync::LazyLock,
     time::SystemTime,
 };
 
@@ -41,7 +41,9 @@ use crate::{
     tycho_client::feed::synchronizer::{ComponentWithState, Snapshot, StateSyncMessage},
 };
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+static METRIC_HTTP_CLIENT: LazyLock<Client> = LazyLock::new(Client::new);
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MetricClient {
     chain: Chain,
     metadata_endpoint: String,
@@ -54,35 +56,9 @@ pub struct MetricClient {
     quote_tokens: HashSet<Bytes>,
     #[serde(skip_serializing, default)]
     secret_key: Option<String>,
-    #[serde(skip, default = "OnceLock::new")]
-    http_client: OnceLock<Client>,
     poll_time: Duration,
     quote_timeout: Duration,
     oracle_update_policy: MetricOracleUpdatePolicy,
-}
-
-impl Clone for MetricClient {
-    fn clone(&self) -> Self {
-        let http_client = OnceLock::new();
-        if let Some(client) = self.http_client.get() {
-            let _ = http_client.set(client.clone());
-        }
-
-        Self {
-            chain: self.chain,
-            metadata_endpoint: self.metadata_endpoint.clone(),
-            chain_endpoint: self.chain_endpoint.clone(),
-            tokens: self.tokens.clone(),
-            token_metadata: self.token_metadata.clone(),
-            tvl: self.tvl,
-            quote_tokens: self.quote_tokens.clone(),
-            secret_key: self.secret_key.clone(),
-            http_client,
-            poll_time: self.poll_time,
-            quote_timeout: self.quote_timeout,
-            oracle_update_policy: self.oracle_update_policy,
-        }
-    }
 }
 
 impl MetricClient {
@@ -138,7 +114,6 @@ impl MetricClient {
             tvl,
             quote_tokens,
             secret_key,
-            http_client: OnceLock::new(),
             poll_time,
             quote_timeout,
             oracle_update_policy,
@@ -146,8 +121,7 @@ impl MetricClient {
     }
 
     fn http_client(&self) -> &Client {
-        self.http_client
-            .get_or_init(Client::new)
+        &METRIC_HTTP_CLIENT
     }
 
     pub fn create_component_with_state(
