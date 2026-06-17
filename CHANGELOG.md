@@ -1,3 +1,11 @@
+## [0.313.0](https://github.com/propeller-heads/tycho/compare/0.312.1...0.313.0) (2026-06-17)
+
+
+### Features
+
+* Add Aerodrome V1 executor ([1f846e4](https://github.com/propeller-heads/tycho/commit/1f846e47a14e597b443a4d623d4f6b315437e15c))
+* Add Aerodrome V1 executor ([#1061](https://github.com/propeller-heads/tycho/issues/1061)) ([fb393ba](https://github.com/propeller-heads/tycho/commit/fb393ba339071df40bdabbb59909d519031b726b))
+
 ## [0.312.1](https://github.com/propeller-heads/tycho/compare/0.312.0...0.312.1) (2026-06-16)
 
 
