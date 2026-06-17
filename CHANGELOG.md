@@ -1,3 +1,11 @@
+## [0.313.1](https://github.com/propeller-heads/tycho/compare/0.313.0...0.313.1) (2026-06-17)
+
+
+### Bug Fixes
+
+* pin postgres test image base by digest and bump clang/llvm to 21 ([cd04734](https://github.com/propeller-heads/tycho/commit/cd047340205cfc0dab9b9c232f1a6db3d808d189))
+* pin postgres test image base by digest and bump clang/llvm to 21 ([#1097](https://github.com/propeller-heads/tycho/issues/1097)) ([30dfc6b](https://github.com/propeller-heads/tycho/commit/30dfc6b80a4b214cc3b7199443d66aa2ff994381))
+
 ## [0.313.0](https://github.com/propeller-heads/tycho/compare/0.312.1...0.313.0) (2026-06-17)
 
 
