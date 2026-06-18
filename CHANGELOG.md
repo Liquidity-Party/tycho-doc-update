@@ -1,3 +1,11 @@
+## [0.314.0](https://github.com/propeller-heads/tycho/compare/0.313.1...0.314.0) (2026-06-18)
+
+
+### Features
+
+* add Fermiswap registry timestamp overwrites ([e684d1c](https://github.com/propeller-heads/tycho/commit/e684d1c2f3dbdb7a3a4bdb6c77eaacedc778b007))
+* add Fermiswap registry timestamp overwrites ([#1101](https://github.com/propeller-heads/tycho/issues/1101)) ([52003f0](https://github.com/propeller-heads/tycho/commit/52003f0a3dfd78a9d6eed4e08633fa663d683655))
+
 ## [0.313.1](https://github.com/propeller-heads/tycho/compare/0.313.0...0.313.1) (2026-06-17)
 
 
