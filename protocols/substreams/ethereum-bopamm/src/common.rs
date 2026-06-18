@@ -150,7 +150,8 @@ fn decode_update_state(data: &[u8]) -> Option<(Vec<u8>, u64, u32)> {
     Some((caller.as_bytes().to_vec(), book_id.low_u64(), ts.low_u32()))
 }
 
-/// `batchUpdateStateWithSignature((address caller,address,uint256 bookId,uint32 ts,uint256[],bytes)[])`.
+/// `batchUpdateStateWithSignature((address caller,address,uint256 bookId,uint32
+/// ts,uint256[],bytes)[])`.
 ///
 /// The first struct field is the caller (the pricing module), matching `updateState`'s caller
 /// argument. This path is unused on-chain today (every commit is a top-level `updateState`).
@@ -266,10 +267,7 @@ mod tests {
         ]);
         let mut input = SEL_BATCH_UPDATE.to_vec();
         input.extend(encode(&[Token::Array(vec![entry])]));
-        assert_eq!(
-            committed_updates(&input),
-            vec![(vec![0x11u8; 20], 1u64, 0x6a23_368f_u32)]
-        );
+        assert_eq!(committed_updates(&input), vec![(vec![0x11u8; 20], 1u64, 0x6a23_368f_u32)]);
     }
 
     #[test]

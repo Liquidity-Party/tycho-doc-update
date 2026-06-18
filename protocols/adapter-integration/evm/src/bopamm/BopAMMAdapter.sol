@@ -6,8 +6,9 @@ import {
     IERC20,
     SafeERC20
 } from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
-import {IERC20Metadata} from
-    "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {
+    IERC20Metadata
+} from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 /// @title BopAMMAdapter
 /// @notice Adapter for swapping tokens on BopAMM (Bebop's on-chain PMM).
@@ -88,9 +89,8 @@ contract BopAMMAdapter is ISwapAdapter {
         }
         _validatePoolTokens(poolId, sellToken, buyToken);
 
-        IERC20(sellToken).safeTransferFrom(
-            msg.sender, address(this), specifiedAmount
-        );
+        IERC20(sellToken)
+            .safeTransferFrom(msg.sender, address(this), specifiedAmount);
         IERC20(sellToken).forceApprove(address(settlement), specifiedAmount);
 
         // BopAMM is a constant-price PMM (no slippage up to the lane cap), so
@@ -263,7 +263,8 @@ contract BopAMMAdapter is ISwapAdapter {
         view
         returns (uint256)
     {
-        uint256 amount = 10 ** IERC20Metadata(sellToken).decimals() / 1e6;
+        uint256 amount =
+            10 ** IERC20Metadata(sellToken).decimals() / 1e6;
         if (amount == 0) {
             amount = 1;
         }

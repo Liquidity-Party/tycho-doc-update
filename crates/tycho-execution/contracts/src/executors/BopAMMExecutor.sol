@@ -28,7 +28,9 @@ contract BopAMMExecutor is IExecutor {
         settlement = IBopAmmV2(settlement_);
     }
 
-    function fundsExpectedAddress(bytes calldata /* data */ )
+    function fundsExpectedAddress(
+        bytes calldata /* data */
+    )
         external
         view
         returns (address receiver)
