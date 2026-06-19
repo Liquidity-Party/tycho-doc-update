@@ -671,6 +671,10 @@ async fn process_update(
                     .get_mut(&removed_component.protocol_system)
                     .map(|id_set| id_set.remove(removed_id));
             }
+
+            for (protocol, component_ids) in &current_state.component_ids_by_protocol {
+                metrics::record_protocol_pool_count(protocol, component_ids.len());
+            }
         }
 
         let update_block_number = update.update.block_number_or_timestamp;
