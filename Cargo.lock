@@ -10078,6 +10078,7 @@ dependencies = [
  "hex",
  "miette",
  "num-bigint",
+ "num-traits",
  "regex",
  "reqwest 0.13.2",
  "serde",
