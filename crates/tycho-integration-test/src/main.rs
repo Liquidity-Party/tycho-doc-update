@@ -198,8 +198,8 @@ struct TychoState {
 type SharedTokenPrices = Arc<RwLock<Arc<HashMap<Bytes, f64>>>>;
 
 /// How often to reload the token-price snapshot. The S3 dump is refreshed weekly; reloading every
-/// few hours picks up a new dump without restarting this long-running binary.
-const TOKEN_PRICE_REFRESH_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
+/// day picks up a new dump without restarting this long-running binary.
+const TOKEN_PRICE_REFRESH_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 
 /// Swap input value used for simulation, denominated in ETH. Tick-based protocols (Uniswap V3/V4)
 /// report near-infinite `get_limits`, so swapping the raw limit produces unrealistic input amounts
