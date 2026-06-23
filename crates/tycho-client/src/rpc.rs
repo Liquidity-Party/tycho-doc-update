@@ -1818,9 +1818,6 @@ impl RPCClient for HttpRPCClient {
         ))
     }
 
-    // clippy false positive: `'a` is required by the trait method signature and is
-    // used in `SnapshotParameters<'a>`, but `async_trait` makes Clippy miss it.
-    #[allow(clippy::extra_unused_lifetimes)]
     async fn get_snapshots<'a>(
         &self,
         request: &SnapshotParameters<'a>,
