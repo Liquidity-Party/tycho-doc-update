@@ -79,6 +79,11 @@ const executors_to_deploy = {
                 "0xb87bAE43a665EB5943A5642F81B26666bC9E5C95"
             ]
         },
+        // Args: FermiSwapper
+        {
+            exchange: "FermiSwapExecutor",
+            args: ["0xb1076fE3AB5e28005C7c323Bac5AC06a680d452e"]
+        },
     ],
     "base": [
         // USV2 - Args: Fee BPS
@@ -99,6 +104,8 @@ const executors_to_deploy = {
         },
         // Aerodrome Slipstreams - Args: (none)
         {exchange: "SlipstreamsExecutor", args: []},
+        // Aerodrome V1 - Args: (none)
+        {exchange: "AerodromeV1Executor", args: []},
         // Args: Wrapped native token address
         {
             exchange: "NativeWrapExecutor", args: ["0x4200000000000000000000000000000000000006"]

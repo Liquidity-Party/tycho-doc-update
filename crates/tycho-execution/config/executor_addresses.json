@@ -19,7 +19,8 @@
     "ekubo_v3": "0xc77A1a9B8ebecc6bFB386720E0A37Bc900860f5b",
     "native_wrapper": "0x8FD892DD5F8E153fe15cc3A7567E18ed6f7b1E0A",
     "rfq:liquorice": "0x81c7febeed3fd67a5fdcf892d43489091caeb186",
-    "vm:liquidityparty": "0x1F8b52899DCf1Be69eaFc754cA3E099Ff15F03aE"
+    "vm:liquidityparty": "0x1F8b52899DCf1Be69eaFc754cA3E099Ff15F03aE",
+    "vm:fermiswap": "0xe2c352232127AfC9803e7eD79F129E458B20925e"
   },
   "base": {
     "uniswap_v2": "0x321C00604355DD20A2CB472D44fe8f37d821A82c",
@@ -28,7 +29,8 @@
     "uniswap_v4": "0x78db9684220541601E9215bB16b219e5DF6cF0fb",
     "rfq:bebop": "0xcDf4E28676b9f2e8C6a722Eb163e0c2f9c0716B7",
     "aerodrome_slipstreams": "0xE12eb9FcD93c7ffabfEd66B20D4B0dF02b44F6B3",
-    "native_wrapper": "0x68AF9cDcc2e177e9D75c60f132b8DC52EAF1adBf"
+    "native_wrapper": "0x68AF9cDcc2e177e9D75c60f132b8DC52EAF1adBf",
+    "aerodrome_v1": "0x76eeB7E737FDf441E0437F7051b4e0b84808c10a"
   },
   "unichain": {
     "uniswap_v2": "0x55345739FCB5c5393f9BE32864439754649A204A",
