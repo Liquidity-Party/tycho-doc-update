@@ -1,3 +1,11 @@
+## [0.317.2](https://github.com/propeller-heads/tycho/compare/0.317.1...0.317.2) (2026-06-23)
+
+
+### Bug Fixes
+
+* **ci:** close pull_request_target injection and gate fork runs ([29b55a7](https://github.com/propeller-heads/tycho/commit/29b55a79c1a2a2817e5e898bc24d6112f7f6c842))
+* **ci:** close pull_request_target injection and gate fork runs ([#1109](https://github.com/propeller-heads/tycho/issues/1109)) ([868ea0b](https://github.com/propeller-heads/tycho/commit/868ea0bc75504be0c5a4b634d61db76f0d54608e))
+
 ## [0.317.1](https://github.com/propeller-heads/tycho/compare/0.317.0...0.317.1) (2026-06-23)
 
 
