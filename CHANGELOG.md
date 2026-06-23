@@ -1,3 +1,199 @@
+## [0.315.0](https://github.com/propeller-heads/tycho/compare/0.314.1...0.315.0) (2026-06-22)
+
+
+### Features
+
+* Cap integration-test swap inputs using token prices ([a153a6f](https://github.com/propeller-heads/tycho/commit/a153a6fbc6d99bf1ecbefc64de625cf76d5c389e))
+* Cap integration-test swap inputs using token prices ([#1103](https://github.com/propeller-heads/tycho/issues/1103)) ([7684ce4](https://github.com/propeller-heads/tycho/commit/7684ce4635ad30935356bd5fc963d0d9a06c32ef))
+* **integration-test:** Add number of pools per protocol metric ([d7070a1](https://github.com/propeller-heads/tycho/commit/d7070a1bfb3f5b2d60f9b32cb0de2d186e42b663))
+* **integration-test:** Add number of pools per protocol metric ([#1105](https://github.com/propeller-heads/tycho/issues/1105)) ([20489b2](https://github.com/propeller-heads/tycho/commit/20489b2c9fdb97e240a916492bf678ee6c07b153))
+
+
+### Bug Fixes
+
+* **integration-test:** Change TOKEN_PRICE_REFRESH_INTERVAL to 24h ([45ed1b2](https://github.com/propeller-heads/tycho/commit/45ed1b270c4927c8763f57ad86036b8f1e64eed4))
+
+## [0.314.1](https://github.com/propeller-heads/tycho/compare/0.314.0...0.314.1) (2026-06-19)
+
+
+### Bug Fixes
+
+* **tycho-simulation:** Apply pool blocklist by default ([a14caa7](https://github.com/propeller-heads/tycho/commit/a14caa7d42ca47f2a6d1a046ea16ce12a00c331b))
+* **tycho-simulation:** Apply pool blocklist by default ([#1104](https://github.com/propeller-heads/tycho/issues/1104)) ([8b9f548](https://github.com/propeller-heads/tycho/commit/8b9f54847e3a195e67a74232890badff82cb562b))
+
+## [0.314.0](https://github.com/propeller-heads/tycho/compare/0.313.1...0.314.0) (2026-06-18)
+
+
+### Features
+
+* add Fermiswap registry timestamp overwrites ([e684d1c](https://github.com/propeller-heads/tycho/commit/e684d1c2f3dbdb7a3a4bdb6c77eaacedc778b007))
+* add Fermiswap registry timestamp overwrites ([#1101](https://github.com/propeller-heads/tycho/issues/1101)) ([52003f0](https://github.com/propeller-heads/tycho/commit/52003f0a3dfd78a9d6eed4e08633fa663d683655))
+
+## [0.313.1](https://github.com/propeller-heads/tycho/compare/0.313.0...0.313.1) (2026-06-17)
+
+
+### Bug Fixes
+
+* pin postgres test image base by digest and bump clang/llvm to 21 ([cd04734](https://github.com/propeller-heads/tycho/commit/cd047340205cfc0dab9b9c232f1a6db3d808d189))
+* pin postgres test image base by digest and bump clang/llvm to 21 ([#1097](https://github.com/propeller-heads/tycho/issues/1097)) ([30dfc6b](https://github.com/propeller-heads/tycho/commit/30dfc6b80a4b214cc3b7199443d66aa2ff994381))
+
+## [0.313.0](https://github.com/propeller-heads/tycho/compare/0.312.1...0.313.0) (2026-06-17)
+
+
+### Features
+
+* Add Aerodrome V1 executor ([1f846e4](https://github.com/propeller-heads/tycho/commit/1f846e47a14e597b443a4d623d4f6b315437e15c))
+* Add Aerodrome V1 executor ([#1061](https://github.com/propeller-heads/tycho/issues/1061)) ([fb393ba](https://github.com/propeller-heads/tycho/commit/fb393ba339071df40bdabbb59909d519031b726b))
+
+## [0.312.1](https://github.com/propeller-heads/tycho/compare/0.312.0...0.312.1) (2026-06-16)
+
+
+### Bug Fixes
+
+* **safe_math:** use exact u64::isqrt in sqrt_u256 base case ([02d4e82](https://github.com/propeller-heads/tycho/commit/02d4e8200bd6b86ef0013e47e1f48d687cddb157))
+* **safe_math:** use exact u64::isqrt in sqrt_u256 base case ([#1093](https://github.com/propeller-heads/tycho/issues/1093)) ([f3f3d9c](https://github.com/propeller-heads/tycho/commit/f3f3d9c0f3cec90b277f7902929c9ada265f8ddb))
+
+## [0.312.0](https://github.com/propeller-heads/tycho/compare/0.311.0...0.312.0) (2026-06-16)
+
+
+### Features
+
+* add Fermiswap execution ([1ee2a94](https://github.com/propeller-heads/tycho/commit/1ee2a945877e43d8b98be425bd3b8f1052f78ca5))
+* add Fermiswap executor ([92b1a85](https://github.com/propeller-heads/tycho/commit/92b1a853f63be8ca08b98860e83a522da005bc08))
+* add fermiswap pair proto ([a564bc5](https://github.com/propeller-heads/tycho/commit/a564bc5cf065a2cb3df8d3f0aa7abb8c9e3a1a10))
+* add FermiSwap VM adapter ([9899932](https://github.com/propeller-heads/tycho/commit/98999321fa820b965de49fd2b33f88e7d1789c91))
+* add FermiSwap VM execution support ([fa4a581](https://github.com/propeller-heads/tycho/commit/fa4a58159f23473219a33be4d5262aae2691bf93))
+* add registry abi ([48178b9](https://github.com/propeller-heads/tycho/commit/48178b9bd267b1b754966c6ee7ffc0e131e690f7))
+* emit Fermi oracle timestamp overrides ([93c29eb](https://github.com/propeller-heads/tycho/commit/93c29ebfb59b97ff700354be567884e326a0e068))
+* fermiswap integration ([#1034](https://github.com/propeller-heads/tycho/issues/1034)) ([049fef0](https://github.com/propeller-heads/tycho/commit/049fef0aac8ad1e27d6d3f59fe2827b00dee5b0a))
+* index FermiSwap pairs with proto-backed stores ([be5010b](https://github.com/propeller-heads/tycho/commit/be5010b9b985ecfa6c88190c381ff04be6a404f2))
+* init fermiswap ([fe88350](https://github.com/propeller-heads/tycho/commit/fe883505ad52e6a2ca6c56e603a5955a64eea9de))
+* support oracle registry ([d49e4af](https://github.com/propeller-heads/tycho/commit/d49e4af6ce38fdc2f6f50cf0fa3d55a2d65c37b5))
+* track Fermi registry block overrides ([c687a46](https://github.com/propeller-heads/tycho/commit/c687a464a9a0fcb30f29289f2e3175530d11f3c4))
+* track Fermi registry block overrides ([dd4e050](https://github.com/propeller-heads/tycho/commit/dd4e05038b23c43d2a2ab7f9186e06fbc5cc4817))
+
+
+### Bug Fixes
+
+* address slither warning and adapater test failing ([d75f320](https://github.com/propeller-heads/tycho/commit/d75f3208091d8d2813bd9badc21ccb4961ff0d3b))
+* ci lint ([41d78f9](https://github.com/propeller-heads/tycho/commit/41d78f98017630d2c719e428a79e7d529e302140))
+* component id parse error ([45dd438](https://github.com/propeller-heads/tycho/commit/45dd43887fe82a0803b158087f241b1be9034951))
+* handle weth token balance deltas ([106bf66](https://github.com/propeller-heads/tycho/commit/106bf6685e1f9f2790413822dfb975de2d5c959c))
+* resolve CI failures ([4221075](https://github.com/propeller-heads/tycho/commit/4221075a5e2de1471d964f1e8d9b9833acc03054))
+* support FermiSwap VM state tracking ([bdae445](https://github.com/propeller-heads/tycho/commit/bdae445e559befb4b2813de2a2363e50c20b2290))
+* update fermiswap balance delta handling ([f3aeba6](https://github.com/propeller-heads/tycho/commit/f3aeba6ffdc3154f487623aaeeff2e9b9e0c4983))
+
+## [0.311.0](https://github.com/propeller-heads/tycho/compare/0.310.0...0.311.0) (2026-06-16)
+
+
+### Features
+
+* add LunarBase protocol integration ([#1053](https://github.com/propeller-heads/tycho/issues/1053)) ([632ee01](https://github.com/propeller-heads/tycho/commit/632ee0153340f6ee4ecd2770f524c5b1521f450e))
+* add test for grouped swaps gas estimates ([1738b67](https://github.com/propeller-heads/tycho/commit/1738b67af4c172887c2af58b4359601e4d51dcc8))
+* include group swap logic in gas estimations ([ba3237e](https://github.com/propeller-heads/tycho/commit/ba3237e944515ecf21af025187875939e9b5fb67))
+* include group swap logic in gas estimations ([#1085](https://github.com/propeller-heads/tycho/issues/1085)) ([856a4c1](https://github.com/propeller-heads/tycho/commit/856a4c1eeeb66d9804bc499b7daaee03d8f0446f))
+
+
+### Bug Fixes
+
+* address lunarbase integration review feedback ([587a762](https://github.com/propeller-heads/tycho/commit/587a76265daf7cf31052cc96f61dac2035154096))
+* bump packages to resolve cargo audit and cargo lints ([afd8eca](https://github.com/propeller-heads/tycho/commit/afd8ecaf5b1912bcadb26bdd3af9184f3f727820))
+* bump packages to resolve cargo audit and cargo lints ([#1091](https://github.com/propeller-heads/tycho/issues/1091)) ([3f7d68f](https://github.com/propeller-heads/tycho/commit/3f7d68f6b823412ff14f065aebe802fa01b96f9f))
+* clean up LunarBase substreams CI issues ([0cbe056](https://github.com/propeller-heads/tycho/commit/0cbe0561c730311887e4317d924563d45fe77919))
+* format LunarBase state freshness check ([f55b5ed](https://github.com/propeller-heads/tycho/commit/f55b5ed0b971c133cbd5a508a6aad1f8c17c2ab4))
+* **lunarbase:** default quotes to whitelisted swap caller ([45ce3ce](https://github.com/propeller-heads/tycho/commit/45ce3ce345456939dcc1504891890a21685a6fe1))
+* remove dead code constants ([2f7b0dd](https://github.com/propeller-heads/tycho/commit/2f7b0dd51d54b84944fc3d6736b6371c14b6ee39))
+* revert unrelated testing harness changes ([f2a462a](https://github.com/propeller-heads/tycho/commit/f2a462a7764ebce3fb938aa8dd5cb1cf08a93b79))
+* update strategy type ([03449dc](https://github.com/propeller-heads/tycho/commit/03449dc9f7b4345a0a25e4bfd365604003f25911))
+* use group protocol_system instead of first swap's ([cb0dd5b](https://github.com/propeller-heads/tycho/commit/cb0dd5b694d577548c226b5074f0a29f069c6d08))
+
+## [0.310.0](https://github.com/propeller-heads/tycho/compare/0.309.0...0.310.0) (2026-06-12)
+
+
+### Features
+
+* bump version ([c88c28a](https://github.com/propeller-heads/tycho/commit/c88c28af3431be89e2d0f8faeeb37a809ce5ff6b))
+* support block env overrides in VM simulation ([9f75b0c](https://github.com/propeller-heads/tycho/commit/9f75b0cf57bb7b13f5b2fb7d426d011d70595784))
+* support block env overrides in VM simulation ([#1074](https://github.com/propeller-heads/tycho/issues/1074)) ([9feb76a](https://github.com/propeller-heads/tycho/commit/9feb76a5410608be251a325b3c2c773c2e3e01e0))
+* support partial VM block env overrides ([cdf5c6c](https://github.com/propeller-heads/tycho/commit/cdf5c6c2249b9d5d692f7cb272cda6e1548c68ca))
+
+
+### Bug Fixes
+
+* add change type detection for storage slot updates ([7051939](https://github.com/propeller-heads/tycho/commit/7051939bbf80601fb7a4b0efe449854a25de1614))
+* address comments ([d4535ff](https://github.com/propeller-heads/tycho/commit/d4535ff444d786b3aacb6e275b428632ff46549e))
+* limit Slipstreams tick deletion handling ([ecb81d0](https://github.com/propeller-heads/tycho/commit/ecb81d0e17eb64d956020adeb486ee3f46b57d09))
+* Slipstreams tick deletion handling ([#1084](https://github.com/propeller-heads/tycho/issues/1084)) ([654ab4e](https://github.com/propeller-heads/tycho/commit/654ab4e123f13d0f8e416b8bb13f3d8afd383626))
+
+## [0.309.0](https://github.com/propeller-heads/tycho/compare/0.308.0...0.309.0) (2026-06-11)
+
+
+### Features
+
+* Native wrapper executors on all chains ([e1d953d](https://github.com/propeller-heads/tycho/commit/e1d953db2a9bf6649aea1bd8b017a245e19658c8))
+* Native wrapper executors on all chains ([#1080](https://github.com/propeller-heads/tycho/issues/1080)) ([d3b0382](https://github.com/propeller-heads/tycho/commit/d3b03824abb555bce0aef525179671b251fefe20))
+
+## [0.308.0](https://github.com/propeller-heads/tycho/compare/0.307.0...0.308.0) (2026-06-11)
+
+
+### Features
+
+* **fee-calculator:** Add getAllClientFees view method ([eef9d96](https://github.com/propeller-heads/tycho/commit/eef9d96587c3a85d50e04d037dd7dfdc843323a5))
+* **fee-calculator:** Add getAllClientFees view method and sub-BPS fee precision support ([#1079](https://github.com/propeller-heads/tycho/issues/1079)) ([57d574b](https://github.com/propeller-heads/tycho/commit/57d574baab84c0f04bc12241c16e1ef0af54cde9))
+* **fee-calculator:** Add sub-BPS fee precision ([d3cd81f](https://github.com/propeller-heads/tycho/commit/d3cd81faa910b60404ce48da5748d219c06b30d9))
+
+
+### Bug Fixes
+
+* **fee-calculator:** Add pagination to getAllClientFees; expose consts ([2342f18](https://github.com/propeller-heads/tycho/commit/2342f18bda260cfaf2d403d8fdc079d56d7ea476))
+
+## [0.307.0](https://github.com/propeller-heads/tycho/compare/0.306.1...0.307.0) (2026-06-11)
+
+
+### Features
+
+* **LiquoriceExecutor:** Deploy it and set new address ([9d2a6dd](https://github.com/propeller-heads/tycho/commit/9d2a6dde3ecc36141e8deb1134790cd44c972475))
+
+
+### Bug Fixes
+
+* **ekubo-v3-executor:** Remove unnecessary constructor ([92320e3](https://github.com/propeller-heads/tycho/commit/92320e301db022b1c6ff44f2e7bfdf4f34b891ab))
+* **etherfi-executor:** Address small audit comments ([42bc57f](https://github.com/propeller-heads/tycho/commit/42bc57f27c952b2449a508152c2c68832d11d9e8))
+* **execution:** Address small audit comments to new executors ([#1078](https://github.com/propeller-heads/tycho/issues/1078)) ([2ba9cdb](https://github.com/propeller-heads/tycho/commit/2ba9cdbd98f6d6cb85a8bd856cda6e15e7dc79f8))
+* **liquorice-executor:** Address small audit comments ([2373d8b](https://github.com/propeller-heads/tycho/commit/2373d8bb1132b9db110fbb41e080a6e522805ebf))
+
+## [0.306.1](https://github.com/propeller-heads/tycho/compare/0.306.0...0.306.1) (2026-06-10)
+
+
+### Bug Fixes
+
+* revert ChangeType::Creation attributes without DB lookup ([941ba6e](https://github.com/propeller-heads/tycho/commit/941ba6e07593ab477bb18a45fd277cfd904a766b))
+* revert ChangeType::Creation attributes without DB lookup ([#1072](https://github.com/propeller-heads/tycho/issues/1072)) ([0e6c61d](https://github.com/propeller-heads/tycho/commit/0e6c61d96b5a2fcceecbc7c0a3ead609c8b3f6a4))
+
+## [0.306.0](https://github.com/propeller-heads/tycho/compare/0.305.1...0.306.0) (2026-06-08)
+
+
+### Features
+
+* add aerodrome v1 to integration test ([c1a2de8](https://github.com/propeller-heads/tycho/commit/c1a2de898bc5abae987a5bdde84eb4f0d67b1814))
+* add aerodrome v1 to integration test ([#1060](https://github.com/propeller-heads/tycho/issues/1060)) ([5f4f781](https://github.com/propeller-heads/tycho/commit/5f4f78128c8f3a283f266372ab9c3c94ed4456ba))
+
+## [0.305.1](https://github.com/propeller-heads/tycho/compare/0.305.0...0.305.1) (2026-06-05)
+
+
+### Bug Fixes
+
+* align native_wrapper component ID with consumers ([ff5b86b](https://github.com/propeller-heads/tycho/commit/ff5b86b7f56edfc1db4cab212b5be0ed41816283))
+* align native_wrapper component ID with consumers ([#1070](https://github.com/propeller-heads/tycho/issues/1070)) ([6658d14](https://github.com/propeller-heads/tycho/commit/6658d141a9de52453e57db8719c49afd62073a25))
+
+## [0.305.0](https://github.com/propeller-heads/tycho/compare/0.304.2...0.305.0) (2026-06-05)
+
+
+### Features
+
+* add BlockStepController to ProtocolStreamBuilder for gated testing ([4bb3b5d](https://github.com/propeller-heads/tycho/commit/4bb3b5db9e19f2391901bd63a6611230caa63f51))
+* add BlockStepController to ProtocolStreamBuilder for gated testing ([#1067](https://github.com/propeller-heads/tycho/issues/1067)) ([1cea37f](https://github.com/propeller-heads/tycho/commit/1cea37fc85891f7733cc6481211b8225a3a6d0cc))
+
 ## [0.304.2](https://github.com/propeller-heads/tycho/compare/0.304.1...0.304.2) (2026-06-03)
 
 

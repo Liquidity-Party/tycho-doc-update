@@ -18,24 +18,16 @@ Tycho now provides early support for partial blocks on Base, enabling sub-second
 
 ## Installation
 
-The `tycho-simulation` package is available on <a href="https://github.com/propeller-heads/tycho-indexer" target="_blank" rel="noopener noreferrer">Github</a>.
+The `tycho-simulation` package is available on <a href="https://crates.io/crates/tycho-simulation" target="_blank" rel="noopener noreferrer">crates.io</a>.
 
-To use the simulation tools with Ethereum Virtual Machine (EVM) chains, add the optional `evm` feature flag to your dependency configuration:
+Add it to your project's `Cargo.toml`:
 
 ```toml
-tycho-simulation = { 
-     git = "https://github.com/propeller-heads/tycho-indexer.git",
-     package = "tycho-simulation",
-     tag = "x.y.z", # Replace with latest version
-     features = ["evm"]
-}
-
+tycho-simulation = "x.y.z"
 ```
 
-Add this to your project's `Cargo.toml` file.
-
 {% hint style="info" %}
-**Note:** Replace `x.y.z` with the latest version number from our <a href="https://github.com/propeller-heads/tycho-indexer/releases" target="_blank" rel="noopener noreferrer">GitHub Releases page</a>. Using the latest release ensures you have the most up-to-date features and bug fixes.
+**Note:** Replace `x.y.z` with the latest version number from <a href="https://crates.io/crates/tycho-simulation" target="_blank" rel="noopener noreferrer">crates.io</a>. Using the latest release ensures you have the most up-to-date features and bug fixes.
 {% endhint %}
 
 ## Main Interface
@@ -204,6 +196,8 @@ let mut protocol_stream = ProtocolStreamBuilder::new("tycho-beta.propellerheads.
 `set_tokens(...)` does **not** act as an ongoing stream filter. New snapshots/components streamed later include the token metadata required for decoding.
 
 Some protocols, such as Balancer V2 and Curve, require a pool filter to be defined to filter out unsupported pools. If a protocol needs a pool filter and the user does not provide one, a warning will be raised during the stream setup process.
+
+`ProtocolStreamBuilder` applies a curated blocklist of pools that are known to break simulation (for example, rebasing-token and insolvent pools) by default, so the stream excludes them automatically. To exclude additional components, pass their IDs to `blocklist_components(...)`.
 
 The stream created emits `Update` messages which consist of:
 
