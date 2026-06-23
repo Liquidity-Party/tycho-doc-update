@@ -1,3 +1,12 @@
+## [0.317.0](https://github.com/propeller-heads/tycho/compare/0.316.0...0.317.0) (2026-06-23)
+
+
+### Features
+
+* add lunarbase executor ([a26c697](https://github.com/propeller-heads/tycho/commit/a26c69777907c0da5cfa9ed75926eef3c1bc94f5))
+* add lunarbase to integration test ([eae621d](https://github.com/propeller-heads/tycho/commit/eae621d8eb9df1cbb4a80535112acf488553f396))
+* add lunarbase to integration test ([#1092](https://github.com/propeller-heads/tycho/issues/1092)) ([65ed276](https://github.com/propeller-heads/tycho/commit/65ed2766902453a9ef8b28078f2cd3c9cb6e58ac))
+
 ## [0.316.0](https://github.com/propeller-heads/tycho/compare/0.315.0...0.316.0) (2026-06-23)
 
 
