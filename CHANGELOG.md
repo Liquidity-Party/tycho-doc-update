@@ -1,3 +1,58 @@
+## [0.315.0](https://github.com/propeller-heads/tycho/compare/0.314.1...0.315.0) (2026-06-22)
+
+
+### Features
+
+* Cap integration-test swap inputs using token prices ([a153a6f](https://github.com/propeller-heads/tycho/commit/a153a6fbc6d99bf1ecbefc64de625cf76d5c389e))
+* Cap integration-test swap inputs using token prices ([#1103](https://github.com/propeller-heads/tycho/issues/1103)) ([7684ce4](https://github.com/propeller-heads/tycho/commit/7684ce4635ad30935356bd5fc963d0d9a06c32ef))
+* **integration-test:** Add number of pools per protocol metric ([d7070a1](https://github.com/propeller-heads/tycho/commit/d7070a1bfb3f5b2d60f9b32cb0de2d186e42b663))
+* **integration-test:** Add number of pools per protocol metric ([#1105](https://github.com/propeller-heads/tycho/issues/1105)) ([20489b2](https://github.com/propeller-heads/tycho/commit/20489b2c9fdb97e240a916492bf678ee6c07b153))
+
+
+### Bug Fixes
+
+* **integration-test:** Change TOKEN_PRICE_REFRESH_INTERVAL to 24h ([45ed1b2](https://github.com/propeller-heads/tycho/commit/45ed1b270c4927c8763f57ad86036b8f1e64eed4))
+
+## [0.314.1](https://github.com/propeller-heads/tycho/compare/0.314.0...0.314.1) (2026-06-19)
+
+
+### Bug Fixes
+
+* **tycho-simulation:** Apply pool blocklist by default ([a14caa7](https://github.com/propeller-heads/tycho/commit/a14caa7d42ca47f2a6d1a046ea16ce12a00c331b))
+* **tycho-simulation:** Apply pool blocklist by default ([#1104](https://github.com/propeller-heads/tycho/issues/1104)) ([8b9f548](https://github.com/propeller-heads/tycho/commit/8b9f54847e3a195e67a74232890badff82cb562b))
+
+## [0.314.0](https://github.com/propeller-heads/tycho/compare/0.313.1...0.314.0) (2026-06-18)
+
+
+### Features
+
+* add Fermiswap registry timestamp overwrites ([e684d1c](https://github.com/propeller-heads/tycho/commit/e684d1c2f3dbdb7a3a4bdb6c77eaacedc778b007))
+* add Fermiswap registry timestamp overwrites ([#1101](https://github.com/propeller-heads/tycho/issues/1101)) ([52003f0](https://github.com/propeller-heads/tycho/commit/52003f0a3dfd78a9d6eed4e08633fa663d683655))
+
+## [0.313.1](https://github.com/propeller-heads/tycho/compare/0.313.0...0.313.1) (2026-06-17)
+
+
+### Bug Fixes
+
+* pin postgres test image base by digest and bump clang/llvm to 21 ([cd04734](https://github.com/propeller-heads/tycho/commit/cd047340205cfc0dab9b9c232f1a6db3d808d189))
+* pin postgres test image base by digest and bump clang/llvm to 21 ([#1097](https://github.com/propeller-heads/tycho/issues/1097)) ([30dfc6b](https://github.com/propeller-heads/tycho/commit/30dfc6b80a4b214cc3b7199443d66aa2ff994381))
+
+## [0.313.0](https://github.com/propeller-heads/tycho/compare/0.312.1...0.313.0) (2026-06-17)
+
+
+### Features
+
+* Add Aerodrome V1 executor ([1f846e4](https://github.com/propeller-heads/tycho/commit/1f846e47a14e597b443a4d623d4f6b315437e15c))
+* Add Aerodrome V1 executor ([#1061](https://github.com/propeller-heads/tycho/issues/1061)) ([fb393ba](https://github.com/propeller-heads/tycho/commit/fb393ba339071df40bdabbb59909d519031b726b))
+
+## [0.312.1](https://github.com/propeller-heads/tycho/compare/0.312.0...0.312.1) (2026-06-16)
+
+
+### Bug Fixes
+
+* **safe_math:** use exact u64::isqrt in sqrt_u256 base case ([02d4e82](https://github.com/propeller-heads/tycho/commit/02d4e8200bd6b86ef0013e47e1f48d687cddb157))
+* **safe_math:** use exact u64::isqrt in sqrt_u256 base case ([#1093](https://github.com/propeller-heads/tycho/issues/1093)) ([f3f3d9c](https://github.com/propeller-heads/tycho/commit/f3f3d9c0f3cec90b277f7902929c9ada265f8ddb))
+
 ## [0.312.0](https://github.com/propeller-heads/tycho/compare/0.311.0...0.312.0) (2026-06-16)
 
 
