@@ -469,6 +469,8 @@ where
     ///
     /// The returned `end_rx` (if any) should be reused for retry attempts since the close
     /// signal may still arrive and we want to remain cancellable across retries.
+    // Newer clippy versions detect this large Err type. Keep the existing API and allow the lint
+    // explicitly.
     #[allow(clippy::result_large_err)]
     #[instrument(skip(self, block_tx, end_rx), fields(extractor_id = %self.extractor_id))]
     async fn state_sync(
@@ -1301,6 +1303,8 @@ mod test {
                 .await
         }
 
+        // clippy false positive: `'a` is required by the trait method signature and is
+        // used in `SnapshotParameters<'a>`, but `async_trait` makes Clippy miss it.
         #[allow(clippy::extra_unused_lifetimes)]
         async fn get_snapshots<'a>(
             &self,
