@@ -84,11 +84,6 @@ const executors_to_deploy = {
             exchange: "FermiSwapExecutor",
             args: ["0xb1076fE3AB5e28005C7c323Bac5AC06a680d452e"]
         },
-        // Args: Metric Oracle
-        {
-            exchange: "MetricExecutor",
-            args: ["0x681E908B8ab57c49C74D770F369754CCC3E1ae09"]
-        },
     ],
     "base": [
         // USV2 - Args: Fee BPS
@@ -114,6 +109,11 @@ const executors_to_deploy = {
         // Args: Wrapped native token address
         {
             exchange: "NativeWrapExecutor", args: ["0x4200000000000000000000000000000000000006"]
+        },
+        // Args: Metric Oracle
+        {
+            exchange: "MetricExecutor",
+            args: ["0x681E908B8ab57c49C74D770F369754CCC3E1ae09"]
         },
     ],
     "unichain": [

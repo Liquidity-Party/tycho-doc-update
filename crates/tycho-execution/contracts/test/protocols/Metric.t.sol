@@ -11,6 +11,7 @@ import {
     MetricExecutor__InvalidDataLength
 } from "@src/executors/MetricExecutor.sol";
 import {TransferManager} from "@src/TransferManager.sol";
+import "../TychoRouterTestSetup.sol";
 
 error MetricExecutorTest__UnexpectedTransferType();
 error MetricDispatcherHarness__NoExecutor();
@@ -425,5 +426,34 @@ contract MetricExecutorTest is Test {
             pool,
             bytes1(uint8(zeroForOne ? 1 : 0))
         );
+    }
+}
+
+contract TychoRouterForMetricTest is TychoRouterTestSetup {
+    function getChain() public pure override returns (string memory) {
+        return "base";
+    }
+
+    function getForkBlock() public pure override returns (uint256) {
+        return 46498514;
+    }
+
+    function testSingleMetricIntegration() public {
+        deal(BASE_WETH, ALICE, 1 ether);
+        uint256 balanceBefore = IERC20(BASE_USDC).balanceOf(ALICE);
+
+        vm.startPrank(ALICE);
+        IERC20(BASE_WETH).approve(tychoRouterAddr, type(uint256).max);
+
+        bytes memory callData =
+            loadCallDataFromFile("test_single_encoding_strategy_metric");
+        (bool success,) = tychoRouterAddr.call(callData);
+
+        uint256 balanceAfter = IERC20(BASE_USDC).balanceOf(ALICE);
+
+        assertTrue(success, "Call Failed");
+        assertEq(IERC20(BASE_WETH).balanceOf(tychoRouterAddr), 0);
+        assertGt(balanceAfter, balanceBefore);
+        vm.stopPrank();
     }
 }

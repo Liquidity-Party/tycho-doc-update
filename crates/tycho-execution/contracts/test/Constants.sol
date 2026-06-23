@@ -208,6 +208,9 @@ contract Constants is
     // FermiSwap
     address FERMI_SWAPPER = 0xb1076fE3AB5e28005C7c323Bac5AC06a680d452e;
 
+    // Metric oracle (Base)
+    address METRIC_ORACLE = 0x681E908B8ab57c49C74D770F369754CCC3E1ae09;
+
     // Angstrom hook address
     address ANGSTROM_HOOK = 0x0000000aa232009084Bd71A5797d089AA4Edfad4;
 
