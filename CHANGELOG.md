@@ -1,3 +1,11 @@
+## [0.318.0](https://github.com/propeller-heads/tycho/compare/0.317.4...0.318.0) (2026-06-24)
+
+
+### Features
+
+* update vm gas estimations ([20f0a04](https://github.com/propeller-heads/tycho/commit/20f0a0464f036f5c71588e098b1d621a29dfc295))
+* update vm gas estimations ([#1100](https://github.com/propeller-heads/tycho/issues/1100)) ([5d19fe6](https://github.com/propeller-heads/tycho/commit/5d19fe693c9f9066db3b0c69607a65fde19ccb00))
+
 ## [0.317.4](https://github.com/propeller-heads/tycho/compare/0.317.3...0.317.4) (2026-06-24)
 
 
