@@ -1,3 +1,11 @@
+## [0.317.4](https://github.com/propeller-heads/tycho/compare/0.317.3...0.317.4) (2026-06-24)
+
+
+### Bug Fixes
+
+* **ci:** scope substreams secrets to the test job ([e3ce91a](https://github.com/propeller-heads/tycho/commit/e3ce91a6ce682b535deeca1f26bf1461e0b123d2))
+* **ci:** scope substreams secrets to the test job ([#1114](https://github.com/propeller-heads/tycho/issues/1114)) ([e9a9cc7](https://github.com/propeller-heads/tycho/commit/e9a9cc77e6cbe8ef71a656130c6e2731c6968db0))
+
 ## [0.317.3](https://github.com/propeller-heads/tycho/compare/0.317.2...0.317.3) (2026-06-23)
 
 
