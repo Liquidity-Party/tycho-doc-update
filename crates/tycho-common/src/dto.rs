@@ -12,6 +12,7 @@ use std::{
     str::FromStr,
 };
 
+use arrayvec::ArrayString;
 use chrono::{NaiveDateTime, Utc};
 use deepsize::{Context, DeepSizeOf};
 use serde::{de, Deserialize, Deserializer, Serialize};
@@ -22,7 +23,7 @@ use uuid::Uuid;
 
 use crate::{
     models::{
-        self, chain_config::CustomChainConfig, Address, Balance, Code, ComponentId, StoreKey,
+        self, chain_config::ChainConfigError, Address, Balance, Code, ComponentId, StoreKey,
         StoreVal,
     },
     serde_primitives::{
@@ -32,9 +33,7 @@ use crate::{
 };
 
 /// Currently supported Blockchains
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default, ToSchema, DeepSizeOf,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Chain {
     #[default]
@@ -46,7 +45,14 @@ pub enum Chain {
     Bsc,
     Unichain,
     Polygon,
-    Custom(CustomChainConfig),
+    #[schema(value_type = String)]
+    Custom(ArrayString<32>),
+}
+
+impl DeepSizeOf for Chain {
+    fn deep_size_of_children(&self, _context: &mut Context) -> usize {
+        0
+    }
 }
 
 pub use models::chain_config::TvlThresholdTier;
@@ -65,7 +71,7 @@ impl fmt::Display for Chain {
 }
 
 impl FromStr for Chain {
-    type Err = strum::ParseError;
+    type Err = ChainConfigError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         models::Chain::from_str(s).map(Self::from)
@@ -105,7 +111,7 @@ impl From<models::Chain> for Chain {
             models::Chain::Bsc => Chain::Bsc,
             models::Chain::Unichain => Chain::Unichain,
             models::Chain::Polygon => Chain::Polygon,
-            models::Chain::Custom(cfg) => Chain::Custom(cfg),
+            models::Chain::Custom(name) => Chain::Custom(name),
         }
     }
 }

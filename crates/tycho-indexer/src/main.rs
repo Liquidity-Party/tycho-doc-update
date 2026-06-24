@@ -37,7 +37,7 @@ use tracing_subscriber::EnvFilter;
 use tycho_common::{
     models::{
         blockchain::{Block, Transaction},
-        chain_config::{ChainConfigRegistry, CustomChainConfig},
+        chain_config::{init_chain_registry, ChainConfigRegistry, CustomChainConfig},
         contract::AccountDelta,
         Address, Chain, ExtractionState, ImplementationType,
     },
@@ -94,16 +94,15 @@ impl ExtractorConfigs {
 }
 
 fn resolve_chain(name: &str, registry: &ChainConfigRegistry) -> Result<Chain, ExtractionError> {
-    match Chain::from_str(name) {
-        Ok(chain) => Ok(chain),
-        Err(_) => registry
-            .get(name)
-            .map(|cfg| Chain::Custom(*cfg))
-            .ok_or_else(|| {
-                ExtractionError::Setup(format!(
-                    "Unknown chain '{name}': add it to the [chains] config section"
-                ))
-            }),
+    if let Some(chain) = Chain::builtin_from_str(name) {
+        return Ok(chain);
+    }
+    if registry.contains(name) {
+        Chain::custom(name).map_err(|e| ExtractionError::Setup(e.to_string()))
+    } else {
+        Err(ExtractionError::Setup(format!(
+            "Unknown chain '{name}': add it to the [chains] config section"
+        )))
     }
 }
 
@@ -268,8 +267,10 @@ fn run_indexer(global_args: GlobalArgs, index_args: IndexArgs) -> Result<(), Ext
                 .expect("Failed to parse retention horizon");
 
             let chain_registry =
-                ChainConfigRegistry::from_configs(extractors_config.chains.clone())
-                    .map_err(|e| ExtractionError::Setup(e.to_string()))?;
+                ChainConfigRegistry::from_configs(extractors_config.chains.clone()).unwrap();
+            init_chain_registry(chain_registry.clone()).map_err(|_| {
+                ExtractionError::Setup("chain config registry already initialised".to_string())
+            })?;
 
             let chains = index_args
                 .chains
@@ -770,12 +771,12 @@ chains:
       medium: 10000
 "#;
         let config: ExtractorConfigs = serde_yaml::from_str(yaml).expect("yaml parse failed");
-        let registry =
-            ChainConfigRegistry::from_configs(config.chains).expect("registry build failed");
-        let Chain::Custom(cfg) = resolve_chain("mychain", &registry).expect("resolve failed")
-        else {
-            panic!("expected Chain::Custom")
-        };
+        let registry = ChainConfigRegistry::from_configs(config.chains.clone()).unwrap();
+        let chain = resolve_chain("mychain", &registry).expect("resolve failed");
+        assert_eq!(chain, Chain::custom("mychain").unwrap());
+        let cfg = registry
+            .get("mychain")
+            .expect("config present");
 
         let expected_native =
             ChainTokenConfig::try_new("0x0000000000000000000000000000000000000000", "ETH", 18)
@@ -792,7 +793,7 @@ chains:
             TvlThresholds::new(1000.0, 10000.0),
         )
         .unwrap();
-        assert_eq!(cfg, expected_cfg);
+        assert_eq!(cfg, &expected_cfg);
     }
 }
 
