@@ -20,9 +20,12 @@ pub fn map_components(
     block: eth::v2::Block,
 ) -> Result<BlockTransactionProtocolComponents> {
     let config: DeploymentConfig = serde_qs::from_str(&params)?;
-    let slot_to_asset: HashMap<Vec<u8>, u64> = (0..MAX_ASSET_ID)
-        .map(|i| (asset_config_slot(i, config.asset_config_base_slot), i))
-        .collect();
+
+    // The asset-config slot map is a pure function of the deployment's base slot, but it is
+    // built lazily on the first module storage change: asset-config writes are rare, so the
+    // `MAX_ASSET_ID` keccak computations are skipped entirely on the blocks (almost all of
+    // them) that never touch the module's storage.
+    let mut slot_to_asset: Option<HashMap<Vec<u8>, u64>> = None;
 
     let mut tx_components = Vec::new();
     for tx in block.transactions() {
@@ -36,6 +39,11 @@ pub fn map_components(
                 if change.address != config.module {
                     continue;
                 }
+                let slot_to_asset = slot_to_asset.get_or_insert_with(|| {
+                    (0..MAX_ASSET_ID)
+                        .map(|i| (asset_config_slot(i, config.asset_config_base_slot), i))
+                        .collect()
+                });
                 let Some(&asset_id) = slot_to_asset.get(&change.key) else { continue };
                 // Only a fresh listing (zero -> non-zero) creates a book. Delisting
                 // (non-zero -> zero) is intentionally not tracked: components are immutable
