@@ -56,7 +56,6 @@ jobs:
             crates/tycho-execution/config/executor_deployments.json
             protocols/testing/fixtures/**
             protocols/testing/scripts/update_runtime_bytecode.sh
-            .github/workflows/ci-foundry.yaml
 
   forge-test:
     name: Forge build, fmt, test (${{ matrix.project.path }})

@@ -85,7 +85,10 @@ async function main() {
     if (!protocols) {
         throw new Error(`No deploy protocols configured for network: ${network}`);
     }
-    const networkDeployments = executorDeployments[network] || {};
+    const networkDeployments = executorDeployments[network];
+    if (!networkDeployments) {
+        throw new Error(`No executor deployments configured for network '${network}' in executor_deployments.json`);
+    }
 
     for (const protocol of protocols) {
         const deployment = networkDeployments[protocol];
@@ -94,21 +97,21 @@ async function main() {
                 `No deployment config for protocol '${protocol}' on network '${network}' in executor_deployments.json`
             );
         }
-        const {contract: exchange, args} = deployment;
-        const Executor = await ethers.getContractFactory(exchange);
+        const {contract: contractName, args} = deployment;
+        const Executor = await ethers.getContractFactory(contractName);
 
         // Get bytecode with constructor arguments
         const deployTx = Executor.getDeployTransaction(...args);
         const bytecode = deployTx.data;
 
         // Use a salt that includes network and executor name
-        const salt = ethers.utils.id(`${exchange}-${network}`);
+        const salt = ethers.utils.id(`${contractName}-${network}`);
 
         // Compute the address where the contract will be deployed
         // CREATE2 address = keccak256(0xff ++ factory_address ++ salt ++ keccak256(bytecode))[12:]
         const bytecodeHash = ethers.utils.keccak256(bytecode);
         const computedAddress = ethers.utils.getCreate2Address(create2FactoryAddress, salt, bytecodeHash);
-        console.log(`${exchange} (${protocol}) will be deployed to: ${computedAddress}`);
+        console.log(`${contractName} (${protocol}) will be deployed to: ${computedAddress}`);
 
         const deploymentData = ethers.utils.concat([salt, bytecode]);
         const tx = await deployer.sendTransaction({
@@ -116,12 +119,12 @@ async function main() {
             data: deploymentData,
         });
         await tx.wait();
-        console.log(`${exchange} deployed to: ${computedAddress}`);
+        console.log(`${contractName} deployed to: ${computedAddress}`);
 
         // Verify on Tenderly
         try {
             await hre.tenderly.verify({
-                name: exchange,
+                name: contractName,
                 address: computedAddress,
             });
             console.log("Contract verified successfully on Tenderly");
@@ -137,7 +140,7 @@ async function main() {
                 address: computedAddress,
                 constructorArguments: args,
             });
-            console.log(`${exchange} verified successfully on blockchain explorer!`);
+            console.log(`${contractName} verified successfully on blockchain explorer!`);
         } catch (error) {
             console.error(`Error during blockchain explorer verification:`, error);
         }

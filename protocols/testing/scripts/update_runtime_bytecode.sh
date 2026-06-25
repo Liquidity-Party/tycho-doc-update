@@ -57,6 +57,14 @@ PERMIT2="0x000000000022D473030F116dDEE9F6B43aC78BA3"
 ADMIN="0x0000000000000000000000000000000000000001"
 
 # fixture | contract | literal constructor args
+#
+# TychoRouter(permit2, feeCalculator, pauserAdmin, unpauserAdmin,
+#             executorSetterAdmin, routerFeeSetterAdmin):
+#   - permit2 is the only immutable, so it is the only arg baked into the
+#     bytecode; it must be the canonical Permit2.
+#   - feeCalculator only needs deployed code (constructor reverts otherwise), so
+#     Permit2 is reused; the real one is set via storage at simulation time.
+#   - the four admins are role grants (storage), so any placeholder works.
 NON_EXECUTOR_FIXTURES=(
     "TychoRouter|TychoRouter|$PERMIT2 $PERMIT2 $ADMIN $ADMIN $ADMIN $ADMIN"
     "FeeCalculator|FeeCalculator|$ADMIN"
