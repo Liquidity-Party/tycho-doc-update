@@ -877,6 +877,7 @@ mod tests {
         engine_db::{create_engine, SHARED_TYCHO_DB},
         protocol::vm::{
             constants::{BALANCER_V2, ERC20_PROXY_BYTECODE},
+            erc20_token::IMPLEMENTATION_SLOT,
             state_builder::EVMPoolStateBuilder,
         },
         simulation::SimulationEngine,
@@ -1309,6 +1310,38 @@ mod tests {
 
         assert!(overwrites.contains_key(&dai_address));
         assert!(overwrites.contains_key(&bal_address));
+    }
+
+    #[tokio::test]
+    async fn test_self_contained_tokens_clear_implementation_slot_in_overwrites() {
+        let mut pool_state: EVMPoolState<PreCachedDB> = setup_pool_state().await;
+        let dai_address = dai_addr();
+        let bal_address = bal_addr();
+        pool_state.self_contained_tokens = HashSet::from([dai_address, bal_address]);
+
+        let overwrites = pool_state
+            .get_overwrites(vec![dai_address, bal_address], U256::from(1_000_000))
+            .unwrap();
+
+        assert_eq!(overwrites[&dai_address][&*IMPLEMENTATION_SLOT], U256::ZERO);
+        assert_eq!(overwrites[&bal_address][&*IMPLEMENTATION_SLOT], U256::ZERO);
+    }
+
+    #[tokio::test]
+    async fn test_disable_overwrite_tokens_do_not_clear_implementation_slot() {
+        let mut pool_state: EVMPoolState<PreCachedDB> = setup_pool_state().await;
+        let dai_address = dai_addr();
+        let bal_address = bal_addr();
+        pool_state.self_contained_tokens = HashSet::from([dai_address, bal_address]);
+        pool_state.disable_overwrite_tokens = HashSet::from([dai_address]);
+
+        let overwrites = pool_state
+            .get_overwrites(vec![dai_address, bal_address], U256::from(1_000_000))
+            .unwrap();
+
+        assert!(overwrites.contains_key(&dai_address));
+        assert!(!overwrites[&dai_address].contains_key(&*IMPLEMENTATION_SLOT));
+        assert_eq!(overwrites[&bal_address][&*IMPLEMENTATION_SLOT], U256::ZERO);
     }
 
     #[tokio::test]
