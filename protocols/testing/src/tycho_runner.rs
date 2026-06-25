@@ -9,7 +9,7 @@ use std::{
 use miette::{IntoDiagnostic, WrapErr};
 use tempfile::NamedTempFile;
 use tracing::{debug, info};
-use tycho_simulation::tycho_common::dto::Chain;
+use tycho_simulation::tycho_common::models::Chain;
 pub struct TychoRunner {
     chain: Chain,
     db_url: String,
@@ -212,7 +212,7 @@ impl TychoRunner {
             "--chains",
             &self.chain.to_string(),
             "--retention-horizon",
-            "2026-01-01T00:00:00",
+            "2099-01-01T00:00:00",
         ]);
 
         cmd.stdout(Stdio::piped())

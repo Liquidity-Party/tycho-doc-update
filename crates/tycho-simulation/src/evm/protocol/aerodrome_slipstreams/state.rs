@@ -38,6 +38,29 @@ use crate::evm::protocol::{
     },
 };
 
+// Cold-storage warmup on the first loop iteration:
+// nextInitializedTickWithinOneWord first call (~3,000) vs warm (~1,060)
+// calculateFees first call via cold getUnstakedFee STATICCALL (~19,050) vs warm (~6,055)
+const FIRST_LOOP_OVERHEAD: i32 = 15_000;
+// Steady-state per-loop: nextInitializedTickWithinOneWord (warm) + getSqrtRatioAtTick
+// + computeSwapStep + calculateFees (warm) + toInt256x2 + EVM opcode overhead
+const LOOP_GAS_COST: i32 = 12_500;
+// cross(): updates tick fee growth and staked reward growth slots.
+// Warm ticks (previously crossed, non-zero SSTORE slots) cost ~22k; cold ticks ~76k.
+// We bias toward the cold end to prefer overestimation: 70k.
+const TICK_CROSSING_GAS_COST: i32 = 70_000;
+// When dfc.scaling_factor != 0, fee() does a TWAP binary search on the observation ring
+// buffer (~77k–91k gas) instead of a simple slot read (~18k–27k gas). This extra cost is
+// added once per swap on top of the base.
+const TWAP_FEE_OVERHEAD: i32 = 65_000;
+// Pre/post loop overhead: fee(), slot0 reads, end-of-swap writes.
+const SWAP_BASE_GAS: i32 = 125_000;
+// Conservative max gas for a single swap. Used to cap get_limits iteration.
+const MAX_SWAP_GAS: u64 = 16_700_000;
+// Maximum initialized ticks that can be crossed within MAX_SWAP_GAS.
+const MAX_TICKS_CROSSED: u64 =
+    (MAX_SWAP_GAS - SWAP_BASE_GAS as u64) / TICK_CROSSING_GAS_COST as u64;
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AerodromeSlipstreamsState {
     id: String,
@@ -151,7 +174,9 @@ impl AerodromeSlipstreamsState {
             tick: self.tick,
             liquidity: self.liquidity,
         };
-        let mut gas_used = U256::from(130_000);
+        let twap_overhead = if self.dfc.scaling_factor() != 0 { TWAP_FEE_OVERHEAD } else { 0 };
+        let mut gas_used = U256::from((SWAP_BASE_GAS + twap_overhead) as u64);
+        let mut n_loops = 0;
 
         let fee = self.get_fee()?;
         while state.amount_remaining != I256::from_raw(U256::from(0u64)) &&
@@ -183,6 +208,7 @@ impl AerodromeSlipstreamsState {
 
             next_tick = next_tick.clamp(MIN_TICK, MAX_TICK);
 
+            let sqrt_price_start = state.sqrt_price;
             let sqrt_price_next = get_sqrt_ratio_at_tick(next_tick)?;
             let (sqrt_price, amount_in, amount_out, fee_amount) = swap_math::compute_swap_step(
                 state.sqrt_price,
@@ -198,7 +224,7 @@ impl AerodromeSlipstreamsState {
             state.sqrt_price = sqrt_price;
 
             let step = StepComputation {
-                sqrt_price_start: state.sqrt_price,
+                sqrt_price_start,
                 tick_next: next_tick,
                 initialized,
                 sqrt_price_next,
@@ -233,12 +259,17 @@ impl AerodromeSlipstreamsState {
                     let liquidity_net = if zero_for_one { -liquidity_raw } else { liquidity_raw };
                     state.liquidity =
                         liquidity_math::add_liquidity_delta(state.liquidity, liquidity_net)?;
+                    gas_used = safe_add_u256(gas_used, U256::from(TICK_CROSSING_GAS_COST))?;
                 }
                 state.tick = if zero_for_one { step.tick_next - 1 } else { step.tick_next };
             } else if state.sqrt_price != step.sqrt_price_start {
                 state.tick = get_tick_at_sqrt_ratio(state.sqrt_price)?;
             }
-            gas_used = safe_add_u256(gas_used, U256::from(2000))?;
+            gas_used = safe_add_u256(gas_used, U256::from(LOOP_GAS_COST))?;
+            if n_loops == 0 {
+                gas_used = safe_add_u256(gas_used, U256::from(FIRST_LOOP_OVERHEAD))?;
+            }
+            n_loops += 1;
         }
         Ok(SwapResults {
             amount_calculated: state.amount_calculated,
@@ -350,10 +381,15 @@ impl ProtocolSim for AerodromeSlipstreamsState {
 
         // Iterate through all ticks in the direction of the swap
         // Continues until there is no more liquidity in the pool or no more ticks to process
+        let mut ticks_crossed: u64 = 0;
         while let Ok((tick, initialized)) = self
             .ticks
             .next_initialized_tick_within_one_word(current_tick, zero_for_one)
         {
+            if ticks_crossed >= MAX_TICKS_CROSSED {
+                break;
+            }
+            ticks_crossed += 1;
             // Clamp the tick value to ensure it's within valid range
             let next_tick = tick.clamp(MIN_TICK, MAX_TICK);
 
@@ -650,6 +686,40 @@ mod tests {
             DynamicFeeConfig::new(3000, 10_000, 1),
         )
         .expect("Failed to create pool")
+    }
+
+    #[test]
+    fn test_partial_step_updates_tick_when_price_moves_without_crossing_initialized_tick() {
+        let pool = create_basic_test_pool();
+        let amount =
+            I256::checked_from_sign_and_abs(Sign::Positive, U256::from(100_000_000_000_000_000u64))
+                .unwrap();
+
+        let result = pool
+            .swap(true, amount, None)
+            .expect("swap should stay within the current liquidity range");
+        let expected_tick =
+            get_tick_at_sqrt_ratio(result.sqrt_price).expect("new sqrt price should map to a tick");
+
+        assert_ne!(result.sqrt_price, pool.sqrt_price);
+        assert_ne!(result.sqrt_price, get_sqrt_ratio_at_tick(-120).unwrap());
+        assert_ne!(expected_tick, pool.tick);
+        assert_eq!(result.tick, expected_tick);
+    }
+
+    #[test]
+    fn test_swap_keeps_boundary_tick_when_price_does_not_move() {
+        let mut pool = create_basic_test_pool();
+        pool.tick = -1;
+        let amount = I256::checked_from_sign_and_abs(Sign::Positive, U256::from(1u64)).unwrap();
+
+        let result = pool
+            .swap(true, amount, None)
+            .expect("swap should consume the input as fee without moving price");
+
+        assert_eq!(result.sqrt_price, pool.sqrt_price);
+        assert_eq!(get_tick_at_sqrt_ratio(result.sqrt_price).unwrap(), 0);
+        assert_eq!(result.tick, pool.tick);
     }
 
     #[test]

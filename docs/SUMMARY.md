@@ -1,7 +1,7 @@
 # Table of contents
 
 * [Quickstart](README.md)
-* [About](../tycho/overview.md)
+* [About](about/README.md)
   * [Motivation](motivation.md)
   * [Concepts](concepts.md)
   * [How to Contribute](how-to-contribute/README.md)
@@ -19,10 +19,9 @@
 * [Simulation](for-solvers/simulation.md)
 * [Execution](for-solvers/execution/README.md)
   * [Encoding](for-solvers/execution/encoding/README.md)
-    * [Native Token Handling (Wrapping & Unwrapping)](for-solvers/execution/encoding/native-token-handling-wrapping-and-unwrapping.md)
   * [Executing](for-solvers/execution/executing.md)
   * [Contract Addresses](for-solvers/execution/contract-addresses.md)
-  * [Execution Venues](../tycho/for-solvers/execution/execution-venues.md)
+  * [Execution Venues](for-solvers/execution/execution-venues.md)
   * [Vault](for-solvers/execution/vault.md)
   * [Migration Guide: V2 to V3](for-solvers/execution/migration-guide-v2-to-v3.md)
 * [Hosted Endpoints](for-solvers/hosted-endpoints.md)

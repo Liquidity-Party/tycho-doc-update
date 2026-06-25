@@ -8,7 +8,7 @@ use tycho_common::{models::Chain, Bytes};
 
 use crate::encoding::{
     errors::EncodingError,
-    evm::utils::{bytes_to_address, get_static_attribute},
+    evm::utils::{bytes_to_address, convert_to_router_token, get_static_attribute},
     models::{EncodingContext, Swap},
     swap_encoder::SwapEncoder,
 };
@@ -54,11 +54,13 @@ impl SwapEncoder for EkuboV3SwapEncoder {
 
         let mut encoded = vec![];
 
-        if encoding_context.group_token_in == *swap.token_in() {
-            encoded.extend(bytes_to_address(swap.token_in())?);
+        if encoding_context.group_token_in == *swap.token_in().address {
+            let token_in = convert_to_router_token(bytes_to_address(&swap.token_in().address)?);
+            encoded.extend(token_in);
         }
 
-        encoded.extend(bytes_to_address(swap.token_out())?);
+        let token_out = convert_to_router_token(bytes_to_address(&swap.token_out().address)?);
+        encoded.extend(token_out);
         encoded.extend((extension, fee, pool_type_config).abi_encode_packed());
 
         Ok(encoded)
@@ -78,10 +80,11 @@ mod tests {
     use std::str::FromStr as _;
 
     use alloy::hex::encode;
+    use num_bigint::BigUint;
     use tycho_common::models::protocol::ProtocolComponent;
 
     use super::*;
-    use crate::encoding::evm::utils::write_calldata_to_file;
+    use crate::encoding::{evm::utils::write_calldata_to_file, models::default_token};
 
     #[test]
     fn test_encode_swap_simple() {
@@ -96,7 +99,12 @@ mod tests {
 
         let component = ProtocolComponent { static_attributes, ..Default::default() };
 
-        let swap = Swap::new(component, token_in.clone(), token_out.clone());
+        let swap = Swap::new(
+            component,
+            default_token(token_in.clone()),
+            default_token(token_out.clone()),
+            BigUint::ZERO,
+        );
 
         let encoding_context = EncodingContext {
             group_token_in: token_in.clone(),
@@ -115,8 +123,8 @@ mod tests {
         assert_eq!(
             hex_swap,
             concat!(
-                // group token in
-                "0000000000000000000000000000000000000000",
+                // group token in (ETH_ADDRESS)
+                "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
                 // token out 1st swap
                 "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
                 // pool config 1st swap
@@ -151,8 +159,9 @@ mod tests {
                 ]),
                 ..Default::default()
             },
-            group_token_in.clone(),
-            intermediary_token.clone(),
+            default_token(group_token_in.clone()),
+            default_token(intermediary_token.clone()),
+            BigUint::ZERO,
         );
 
         let second_swap = Swap::new(
@@ -164,8 +173,9 @@ mod tests {
                 ]),
                 ..Default::default()
             },
-            intermediary_token.clone(),
-            group_token_out.clone(),
+            default_token(intermediary_token.clone()),
+            default_token(group_token_out.clone()),
+            BigUint::ZERO,
         );
 
         let first_encoded_swap = encoder
@@ -181,8 +191,8 @@ mod tests {
         assert_eq!(
             combined_hex,
             concat!(
-                // group token in
-                "0000000000000000000000000000000000000000",
+                // group token in (ETH_ADDRESS)
+                "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
                 // token out 1st swap
                 "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
                 // pool config 1st swap

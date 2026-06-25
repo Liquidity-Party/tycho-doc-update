@@ -40,8 +40,11 @@ use tycho_simulation::{
         BlockHeader, FeedMessage,
     },
     tycho_common::{
-        dto::{Chain, ProtocolComponent, ResponseProtocolState},
-        models::{token::Token, Chain as ChainModel},
+        models::{
+            protocol::{ProtocolComponent, ProtocolComponentState},
+            token::Token,
+            Chain,
+        },
         Bytes,
     },
 };
@@ -69,6 +72,8 @@ static CLONE_TO_BASE_PROTOCOL: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| 
     HashMap::from([
         ("ethereum-sushiswap-v2", "ethereum-uniswap-v2"),
         ("ethereum-pancakeswap-v2", "ethereum-uniswap-v2"),
+        ("base-alienbase-v3", "ethereum-uniswap-v3-logs-only"),
+        ("unichain-curve", "ethereum-curve"),
     ])
 });
 
@@ -118,19 +123,14 @@ impl TestRunner {
         let substreams_path = root_path
             .join("substreams")
             .join(&base_protocol);
-        let evm_path = root_path.join("evm");
+        let evm_path = root_path.join("adapter-integration/evm");
         let adapter_contract_builder =
             AdapterContractBuilder::new(evm_path.to_string_lossy().to_string());
 
-        // Calculate config file path based on protocol. If the protocol is a clone of another
-        // protocol, we assume this protocol name will be appended to the integration test filename.
+        // Calculate config file path based on protocol. Clone protocols use their full name
+        // in the integration test filename (e.g. integration_test_unichain_curve.tycho.yaml).
         let config_file_name = if protocol != base_protocol {
-            format!(
-                "integration_test_{}.tycho.yaml",
-                protocol
-                    .replace(format!("{chain}-").as_str(), "")
-                    .replace('-', "_")
-            )
+            format!("integration_test_{}.tycho.yaml", protocol.replace('-', "_"))
         } else {
             "integration_test.tycho.yaml".to_string()
         };
@@ -278,7 +278,7 @@ impl TestRunner {
     async fn run_live_testing(&self, config: &IntegrationTestsConfig) -> miette::Result<()> {
         info!("Starting live testing for protocol {}", &config.protocol_system);
 
-        let chain = ChainModel::from(self.chain);
+        let chain = self.chain;
         // Load tokens for the stream
         let all_tokens = tycho_simulation::utils::load_all_tokens(
             "localhost:4242",
@@ -311,19 +311,24 @@ impl TestRunner {
         if let Some(vm_adapter_path) = adapter_contract_path_str {
             decoder_context = decoder_context.vm_adapter_path(vm_adapter_path);
         }
-        let protocol_stream_builder =
-            register_protocol(protocol_stream_builder, &config.protocol_system, decoder_context)?;
+        let protocol_stream_builder = register_protocol(
+            protocol_stream_builder,
+            &config.protocol_system,
+            chain,
+            decoder_context,
+        )?;
 
         let stream_builder = protocol_stream_builder
             .skip_state_decode_failures(true)
             .set_tokens(all_tokens)
             .await;
 
-        let mut stream = stream_builder
+        let stream = stream_builder
             .build()
             .await
             .into_diagnostic()
             .wrap_err("Failed to build protocol stream")?;
+        tokio::pin!(stream);
 
         info!("Live testing started. Processing stream updates...");
 
@@ -558,7 +563,7 @@ impl TestRunner {
         let (protocol_components, snapshot, all_tokens) =
             self.fetch_from_tycho_rpc(&config.protocol_system, expected_ids, stop_block)?;
 
-        let response_protocol_states_by_id: HashMap<String, ResponseProtocolState> = snapshot
+        let response_protocol_states_by_id: HashMap<String, ProtocolComponentState> = snapshot
             .states
             .clone()
             .into_iter()
@@ -751,7 +756,7 @@ impl TestRunner {
     /// # Returns
     /// A tuple containing:
     /// - `Update` - Decoded protocol state update for simulation
-    /// - `HashMap<String, ResponseProtocolState>` - Protocol states by component ID
+    /// - `HashMap<String, ProtocolComponentState>` - Protocol states by component ID
     /// - `Block` - The block header for the specified block
     #[allow(clippy::type_complexity, clippy::too_many_arguments)]
     fn fetch_from_tycho_rpc(
@@ -810,7 +815,7 @@ impl TestRunner {
         let contract_ids: Vec<Bytes> = protocol_components
             .clone()
             .into_iter()
-            .flat_map(|component| component.contract_ids)
+            .flat_map(|component| component.contract_addresses)
             .chain(
                 traced_entry_points
                     .values()
@@ -860,7 +865,7 @@ impl TestRunner {
         let _ = tycho_simulation::evm::engine_db::SHARED_TYCHO_DB.clear();
 
         let protocol_stream_builder =
-            ProtocolStreamBuilder::new("", self.chain.into()).skip_state_decode_failures(true);
+            ProtocolStreamBuilder::new("", self.chain).skip_state_decode_failures(true);
 
         let mut decoder_context = DecoderContext::new().vm_traces(vm_simulation_traces);
         if let Some(vm_adapter_path) = adapter_contract_path.as_ref() {
@@ -868,8 +873,12 @@ impl TestRunner {
                 decoder_context = decoder_context.vm_adapter_path(path_str);
             }
         }
-        let protocol_stream_builder =
-            register_protocol(protocol_stream_builder, protocol_system, decoder_context)?;
+        let protocol_stream_builder = register_protocol(
+            protocol_stream_builder,
+            protocol_system,
+            self.chain,
+            decoder_context,
+        )?;
 
         let decoder = protocol_stream_builder.get_decoder();
         initialize_hook_handlers().into_diagnostic()?;
@@ -1033,7 +1042,7 @@ impl TestRunner {
                 .ok_or_else(|| miette!("Couldn't find protocol component {id}"))?;
 
             let tokens = component.tokens.clone();
-            let formatted_token_str = format!("{:}/{:}", &tokens[0].symbol, &tokens[1].symbol);
+            let formatted_token_str = format!("{:}/{:}", tokens[0].symbol, tokens[1].symbol);
             state
                 .spot_price(&tokens[0], &tokens[1])
                 .map(|price| info!("[{}] Spot price {:?}: {:?}", id, formatted_token_str, price))
@@ -1112,7 +1121,7 @@ impl TestRunner {
                             (protocol_system): EXECUTOR_ADDRESS
                         }
                     });
-                    let chain_model = ChainModel::from(self.chain);
+                    let chain_model = self.chain;
                     let (solution, calldata) = encode_swap(
                         component,
                         None,
@@ -1121,6 +1130,7 @@ impl TestRunner {
                         amount_in.clone(),
                         chain_model,
                         Some(executors_json.to_string()),
+                        amount_out_result.gas.clone(),
                     )?;
 
                     // Create unique simulation ID
@@ -1139,6 +1149,7 @@ impl TestRunner {
                             component_id: component.id.to_string(),
                             token_in: token_in.symbol.clone(),
                             token_out: token_out.symbol.clone(),
+                            estimated_gas: amount_out_result.gas.clone(),
                         },
                     );
                 }
@@ -1200,7 +1211,7 @@ impl TestRunner {
             return Ok(());
         }
 
-        let chain_model = ChainModel::from(self.chain);
+        let chain_model = self.chain;
         let rpc_tools = RPCTools::new(self.rpc_provider.url.as_ref(), &chain_model).await?;
 
         // Prepare router overwrites data
@@ -1320,7 +1331,7 @@ impl TestRunner {
     fn validate_token_balances(
         &self,
         component_tokens: &HashMap<String, Vec<Token>>,
-        protocol_states_by_id: &HashMap<String, ResponseProtocolState>,
+        protocol_states_by_id: &HashMap<String, ProtocolComponentState>,
         stop_block: u64,
     ) -> miette::Result<()> {
         for (id, component) in protocol_states_by_id.iter() {
@@ -1406,7 +1417,7 @@ mod tests {
 
     use dotenv::dotenv;
     use glob::glob;
-    use tycho_simulation::tycho_common::{dto::ResponseProtocolState, Bytes};
+    use tycho_simulation::tycho_common::{models::protocol::ProtocolComponentState, Bytes};
 
     use super::*;
 
@@ -1479,7 +1490,7 @@ mod tests {
         let block_number = 21998530;
         let token_bytes = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
         let component_id = "0x787B8840100d9BaAdD7463f4a73b5BA73B00C6cA".to_string();
-        let token = Token::new(&token_bytes, "FAKE", 18, 0, &[], Chain::Ethereum.into(), 100);
+        let token = Token::new(&token_bytes, "FAKE", 18, 0, &[], Chain::Ethereum, 100);
 
         let mut balances = HashMap::new();
         let balance_bytes = Bytes::from(
@@ -1488,16 +1499,12 @@ mod tests {
                 .to_be_bytes::<32>(),
         );
         balances.insert(token_bytes.clone(), balance_bytes.clone());
-        let protocol_state = ResponseProtocolState {
-            component_id: component_id.clone(),
-            balances,
-            ..Default::default()
-        };
+        let protocol_state = ProtocolComponentState::new(&component_id, HashMap::new(), balances);
 
         let mut component_tokens = HashMap::new();
         component_tokens.insert(component_id.clone(), vec![token]);
         let mut protocol_states_by_id = HashMap::new();
-        protocol_states_by_id.insert(component_id.clone(), protocol_state.clone());
+        protocol_states_by_id.insert(component_id.clone(), protocol_state);
 
         let result =
             runner.validate_token_balances(&component_tokens, &protocol_states_by_id, block_number);
@@ -1512,22 +1519,18 @@ mod tests {
         let block_number = 21998530;
         let token_bytes = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
         let component_id = "0x787B8840100d9BaAdD7463f4a73b5BA73B00C6cA".to_string();
-        let token = Token::new(&token_bytes, "FAKE", 18, 0, &[], Chain::Ethereum.into(), 100);
+        let token = Token::new(&token_bytes, "FAKE", 18, 0, &[], Chain::Ethereum, 100);
 
         // Set expected balance to zero
         let mut balances = HashMap::new();
         let balance_bytes = Bytes::from(U256::from(0).to_be_bytes::<32>());
         balances.insert(token_bytes.clone(), balance_bytes.clone());
-        let protocol_state = ResponseProtocolState {
-            component_id: component_id.clone(),
-            balances,
-            ..Default::default()
-        };
+        let protocol_state = ProtocolComponentState::new(&component_id, HashMap::new(), balances);
 
         let mut component_tokens = HashMap::new();
         component_tokens.insert(component_id.clone(), vec![token]);
         let mut protocol_states_by_id = HashMap::new();
-        protocol_states_by_id.insert(component_id.clone(), protocol_state.clone());
+        protocol_states_by_id.insert(component_id.clone(), protocol_state);
 
         dotenv().ok();
         let result =

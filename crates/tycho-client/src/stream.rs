@@ -8,8 +8,9 @@ use std::{
 use thiserror::Error;
 use tokio::{sync::mpsc::Receiver, task::JoinHandle};
 use tracing::{info, warn};
-use tycho_common::dto::{
-    Chain, ExtractorIdentity, PaginationLimits, PaginationParams, ProtocolSystemsRequestBody,
+use tycho_common::{
+    dto::{PaginationLimits, ProtocolSystemsRequestBody},
+    models::{Chain, ExtractorIdentity},
 };
 
 use crate::{
@@ -18,7 +19,7 @@ use crate::{
         component_tracker::ComponentFilter, synchronizer::ProtocolStateSynchronizer, BlockHeader,
         BlockSynchronizer, BlockSynchronizerError, FeedMessage,
     },
-    rpc::{HttpRPCClientOptions, RPCClient},
+    rpc::{HttpRPCClientOptions, ProtocolSystemsParams, RPCClient},
     HttpRPCClient, WsDeltasClient,
 };
 
@@ -69,6 +70,7 @@ pub struct TychoStreamBuilder {
     include_tvl: bool,
     compression: bool,
     partial_blocks: bool,
+    max_messages: Option<usize>,
 }
 
 impl TychoStreamBuilder {
@@ -99,6 +101,7 @@ impl TychoStreamBuilder {
             include_tvl: false,
             compression: true,
             partial_blocks: false,
+            max_messages: None,
         }
     }
 
@@ -213,6 +216,23 @@ impl TychoStreamBuilder {
         self
     }
 
+    /// Stops the stream after emitting this many messages. Useful for testing or
+    /// triggering a periodic restart after a fixed number of blocks.
+    pub fn max_messages(mut self, n: usize) -> Self {
+        self.max_messages = Some(n);
+        self
+    }
+
+    /// Overrides the maximum number of retry attempts for state synchronizer startup.
+    /// The retry cooldown is derived from the chain's block time and is not affected.
+    pub fn max_retries(mut self, max_retries: u64) -> Self {
+        let cooldown = match &self.state_sync_retry_config {
+            RetryConfiguration::Constant(c) => c.cooldown,
+        };
+        self.state_sync_retry_config = RetryConfiguration::constant(max_retries, cooldown);
+        self
+    }
+
     /// Blocklist specific component IDs across all registered exchanges.
     ///
     /// Blocklisted components are never tracked, regardless of TVL or other
@@ -285,6 +305,9 @@ impl TychoStreamBuilder {
             Duration::from_secs(self.timeout),
             self.max_missed_blocks,
         );
+        if let Some(n) = self.max_messages {
+            block_sync.max_messages(n);
+        }
 
         let requested: HashSet<_> = self.exchanges.keys().cloned().collect();
         let info = ProtocolSystemsInfo::fetch(&rpc_client, self.chain, &requested).await;
@@ -369,11 +392,9 @@ impl ProtocolSystemsInfo {
     ) -> Self {
         let page_size =
             ProtocolSystemsRequestBody::effective_max_page_size(rpc_client.compression());
+        let params = ProtocolSystemsParams::new(chain).with_pagination(0, page_size);
         let response = rpc_client
-            .get_protocol_systems(&ProtocolSystemsRequestBody {
-                chain,
-                pagination: PaginationParams { page: 0, page_size },
-            })
+            .get_protocol_systems(params)
             .await
             .map_err(|e| {
                 warn!(
@@ -387,26 +408,30 @@ impl ProtocolSystemsInfo {
             return Self { dci_protocols: HashSet::new(), other_available: HashSet::new() };
         };
 
-        if response.pagination.total > page_size {
+        if response.total() > page_size {
             warn!(
                 "Server has {} protocol systems but only {} were fetched (page_size={page_size}). \
                  Availability info may be incomplete.",
-                response.pagination.total,
-                response.protocol_systems.len(),
+                response.total(),
+                response.data().protocol_systems().len(),
             );
         }
 
         let available: HashSet<_> = response
-            .protocol_systems
-            .into_iter()
+            .data()
+            .protocol_systems()
+            .iter()
+            .cloned()
             .collect();
         let other_available = available
             .difference(requested_exchanges)
             .cloned()
             .collect();
         let mut dci_protocols: HashSet<String> = response
-            .dci_protocols
-            .into_iter()
+            .data()
+            .dci_protocols()
+            .iter()
+            .cloned()
             .collect();
 
         // TODO(ENG-5302): Remove this fallback once all environments serve

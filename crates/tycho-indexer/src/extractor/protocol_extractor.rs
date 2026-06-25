@@ -196,7 +196,7 @@ where
             Err(err) => return Err(ExtractionError::Setup(err.to_string())),
         };
 
-        res.ensure_protocol_types().await;
+        res.ensure_protocol_types().await?;
         Ok(res)
     }
 
@@ -341,12 +341,14 @@ where
             .set(self.protocol_cache.size_of().await as f64);
 
             if let Some(dci_plugin) = &self.dci_plugin {
+                let dci = dci_plugin.lock().await;
                 gauge!(
                     "dci_cache_size",
                     "chain" => self.chain.to_string(),
                     "extractor" => self.name.clone(),
                 )
-                .set(dci_plugin.lock().await.cache_size() as f64);
+                .set(dci.cache_size() as f64);
+                dci.emit_cache_metrics(&self.chain.to_string(), &self.name);
             }
         }
     }
@@ -602,6 +604,7 @@ where
         Ok(combined_balances)
     }
 
+    #[instrument(skip_all, fields(new_tokens_count))]
     async fn construct_currency_tokens(
         &self,
         msg: &BlockChanges,
@@ -686,6 +689,7 @@ where
             .flatten()
             .map(|t| (t.address.clone(), t));
 
+        tracing::Span::current().record("new_tokens_count", unknown_tokens.len());
         if !unknown_tokens.is_empty() {
             debug!(?unknown_tokens, block_number = msg.block.number, "NewTokens");
         }
@@ -705,6 +709,7 @@ where
     ///
     /// This includes updating the reorg buffer, committing to the database, emitting sync updates
     /// and metrics and aggregating the changes).
+    #[instrument(skip_all, fields(block_number = msg.block.number, final_block_height))]
     async fn process_full_block_message(
         &self,
         msg: BlockChanges,
@@ -749,12 +754,16 @@ where
             let (extractor_name, chain) = (self.name.clone(), self.chain);
 
             if let Some(db_commit_handle_to_join) = commit_handle_guard.take() {
-                let awaited_commit = !db_commit_handle_to_join
+                let needs_await = !db_commit_handle_to_join
                     .inner()
                     .is_finished();
                 let now = chrono::Utc::now().naive_utc();
 
-                match db_commit_handle_to_join.await {
+                let result = db_commit_handle_to_join
+                    .instrument(info_span!("await_previous_commit"))
+                    .await;
+
+                match result {
                     Ok(Ok(())) => {}
                     Ok(Err(storage_err)) => {
                         return Err(storage_err);
@@ -766,7 +775,7 @@ where
                     }
                 }
 
-                if awaited_commit {
+                if needs_await {
                     let wait_time = chrono::Utc::now()
                         .naive_utc()
                         .signed_duration_since(now);
@@ -798,14 +807,17 @@ where
                 .record(now.elapsed().as_millis() as f64);
 
                 Ok(())
-            }).instrument(info_span!(
+            });
+            let commit_span = info_span!(
                 parent: None,
                 "commit_blocks_task",
                 batch_size,
                 block_height = last_block_height,
                 extractor_id = self.name.clone(),
                 chain = %self.chain,
-            ));
+            );
+            commit_span.follows_from(tracing::Span::current().id());
+            let new_handle = new_handle.instrument(commit_span);
 
             *commit_handle_guard = Some(new_handle);
 
@@ -855,7 +867,7 @@ where
     }
 
     /// Make sure that the protocol types are present in the database.
-    async fn ensure_protocol_types(&self) {
+    async fn ensure_protocol_types(&self) -> Result<(), ExtractionError> {
         let protocol_types: Vec<ProtocolType> = self
             .protocol_types
             .values()
@@ -864,7 +876,8 @@ where
         self.gateway
             .inner
             .ensure_protocol_types(&protocol_types)
-            .await;
+            .await?;
+        Ok(())
     }
 
     async fn get_cursor(&self) -> String {
@@ -1300,6 +1313,38 @@ where
                 });
 
         // Handle reverted protocol state
+
+        // First pass: collect attributes first introduced with ChangeType::Creation across the
+        // entire reverted range. These have no prior state and must be deleted on revert — no
+        // buffer or DB lookup is needed or possible for them.
+        let reverted_created_attrs: HashMap<String, HashSet<String>> = reverted_state
+            .iter()
+            .flat_map(|block_msg| {
+                block_msg
+                    .block_update()
+                    .txs_with_update
+                    .iter()
+                    .flat_map(|update| {
+                        update
+                            .state_updates
+                            .iter()
+                            .filter(|(c_id, _)| !reverted_components_creations.contains_key(*c_id))
+                            .flat_map(|(c_id, delta)| {
+                                delta
+                                    .created_attributes
+                                    .iter()
+                                    .map(move |attr| (c_id.clone(), attr.clone()))
+                            })
+                    })
+            })
+            .fold(HashMap::new(), |mut acc, (c_id, attr)| {
+                acc.entry(c_id)
+                    .or_default()
+                    .insert(attr);
+                acc
+            });
+
+        // Second pass: build the lookup key set, excluding creation attributes (no prior state).
         let reverted_protocol_state_keys: HashSet<_> = reverted_state
             .iter()
             .flat_map(|block_msg| {
@@ -1316,6 +1361,11 @@ where
                                 delta
                                     .updated_attributes
                                     .keys()
+                                    .filter(|attr| {
+                                        !reverted_created_attrs
+                                            .get(c_id.as_str())
+                                            .is_some_and(|created| created.contains(*attr))
+                                    })
                                     .chain(delta.deleted_attributes.iter())
                                     .map(move |key| (c_id, key))
                             })
@@ -1357,20 +1407,20 @@ where
             .await
             .map_err(ExtractionError::Storage)?;
 
-        // Then merge the two and cast it to the expected struct
-        let missing_components_states_map = missing_map
+        let missing_components_states_map: Vec<(ProtocolComponentState, Vec<String>)> = missing_map
             .into_iter()
             .map(|(component_id, keys)| {
-                missing_components_states
+                let state = missing_components_states
                     .iter()
                     .find(|comp| comp.component_id == component_id)
-                    .map(|state| (state.clone(), keys))
+                    .cloned()
                     .ok_or(ExtractionError::Storage(StorageError::NotFound(
                         "Component".to_owned(),
                         component_id.to_string(),
-                    )))
+                    )))?;
+                Ok((state, keys))
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>, ExtractionError>>()?;
 
         let mut not_found: HashMap<_, HashSet<_>> = HashMap::new();
         let mut db_states: HashMap<(String, String), Bytes> = HashMap::new();
@@ -1390,7 +1440,7 @@ where
 
         let empty = HashSet::<String>::new();
 
-        let state_deltas: HashMap<String, ProtocolComponentStateDelta> = db_states
+        let mut state_deltas: HashMap<String, ProtocolComponentStateDelta> = db_states
             .into_iter()
             .chain(buffered_state)
             .fold(HashMap::new(), |mut acc, ((c_id, key), value)| {
@@ -1402,11 +1452,32 @@ where
                             .get(&c_id)
                             .unwrap_or(&empty)
                             .clone(),
+                        created_attributes: HashSet::new(),
                     })
                     .updated_attributes
                     .insert(key.clone(), value);
                 acc
             });
+
+        // Safety net: components with attrs absent from both buffer and DB still need a delta.
+        for (c_id, deleted_keys) in &not_found {
+            state_deltas
+                .entry(c_id.clone())
+                .or_insert_with(|| {
+                    ProtocolComponentStateDelta::new(c_id, HashMap::new(), deleted_keys.clone())
+                });
+        }
+
+        // Revert ChangeType::Creation attributes by emitting deletions — they had no prior state.
+        for (c_id, created_keys) in reverted_created_attrs {
+            state_deltas
+                .entry(c_id.clone())
+                .or_insert_with(|| {
+                    ProtocolComponentStateDelta::new(&c_id, HashMap::new(), HashSet::new())
+                })
+                .deleted_attributes
+                .extend(created_keys);
+        }
 
         // Handle component balance changes
         let reverted_component_balances_keys: HashSet<(&String, Bytes)> = reverted_state
@@ -1530,10 +1601,35 @@ pub struct ExtractorPgGateway {
 #[automock]
 #[async_trait]
 pub trait ExtractorGateway: Send + Sync {
+    /// Returns the last persisted Substreams cursor together with the hash of the block it was
+    /// saved at.
+    ///
+    /// # Errors
+    /// Returns [`StorageError::NotFound`] when no cursor has ever been persisted for this
+    /// extractor, i.e. on the very first run before any block has been processed. Callers use
+    /// this to distinguish a fresh extractor from a resumed one.
     async fn get_cursor(&self) -> Result<(Vec<u8>, Bytes), StorageError>;
 
-    async fn ensure_protocol_types(&self, new_protocol_types: &[ProtocolType]);
+    /// Idempotently registers `new_protocol_types`, inserting any that do not yet exist and
+    /// leaving already-present types untouched.
+    ///
+    /// # Errors
+    /// Returns a [`StorageError`] if the protocol types could not be persisted.
+    async fn ensure_protocol_types(
+        &self,
+        new_protocol_types: &[ProtocolType],
+    ) -> Result<(), StorageError>;
 
+    /// Persists every change in `changes` for a single block and records `new_cursor` as the
+    /// latest processed position.
+    ///
+    /// All writes for the block are staged within one transaction. When `force_commit` is `true`
+    /// the transaction is flushed to the store immediately; otherwise it is only flushed once
+    /// enough blocks have accumulated to reach the configured batch size.
+    ///
+    /// # Errors
+    /// Returns a [`StorageError`] if any staged write or the commit fails. On error the block's
+    /// changes are not committed.
     async fn advance(
         &self,
         changes: &BlockChanges,
@@ -1541,20 +1637,58 @@ pub trait ExtractorGateway: Send + Sync {
         force_commit: bool,
     ) -> Result<(), StorageError>;
 
+    /// Returns the current state of the protocol components identified by `component_ids`.
+    ///
+    /// Only components that exist in the store are returned: unknown ids are silently omitted
+    /// rather than producing an error, so the result may be shorter than `component_ids` (and
+    /// empty if none are found).
+    ///
+    /// # Errors
+    /// Returns a [`StorageError`] only on an underlying store failure, never for missing ids.
     async fn get_protocol_states<'a>(
         &self,
         component_ids: &[&'a str],
     ) -> Result<Vec<ProtocolComponentState>, StorageError>;
 
+    /// Returns the contracts at the given `addresses`, including their storage slots.
+    ///
+    /// Only addresses that exist in the store are returned: unknown addresses are silently
+    /// omitted rather than producing an error, so the result may be shorter than `addresses`
+    /// (and empty if none are found).
+    ///
+    /// # Errors
+    /// Returns a [`StorageError`] only on an underlying store failure, never for missing
+    /// addresses.
     async fn get_contracts(&self, addresses: &[Address]) -> Result<Vec<Account>, StorageError>;
 
+    /// Returns component balances keyed by component id and then by token address.
+    ///
+    /// Only components that have stored balances appear in the map: unknown or balance-less
+    /// `component_ids` are simply absent rather than producing an error, so the map may have
+    /// fewer keys than `component_ids` (and be empty if none are found).
+    ///
+    /// # Errors
+    /// Returns a [`StorageError`] only on an underlying store failure, never for missing ids.
     async fn get_components_balances<'a>(
         &self,
         component_ids: &[&'a str],
     ) -> Result<HashMap<String, HashMap<Bytes, ComponentBalance>>, StorageError>;
 
-    async fn get_block(&self, block_number: Bytes) -> Result<Block, StorageError>;
+    /// Returns the block identified by the given hash.
+    ///
+    /// # Errors
+    /// Returns [`StorageError::NotFound`] when no block with that hash exists in the store. Unlike
+    /// the collection getters, a missing block is an error because a single value is expected.
+    async fn get_block(&self, block_hash: Bytes) -> Result<Block, StorageError>;
 
+    /// Returns account balances keyed by account address and then by token address.
+    ///
+    /// Only accounts that have stored balances appear in the map: unknown or balance-less
+    /// accounts are simply absent rather than producing an error, so the map may have fewer keys
+    /// than `accounts` (and be empty if none are found).
+    ///
+    /// # Errors
+    /// Returns a [`StorageError`] only on an underlying store failure, never for missing accounts.
     async fn get_account_balances(
         &self,
         accounts: &[Address],
@@ -1614,11 +1748,13 @@ impl ExtractorGateway for ExtractorPgGateway {
         }
     }
 
-    async fn ensure_protocol_types(&self, new_protocol_types: &[ProtocolType]) {
+    async fn ensure_protocol_types(
+        &self,
+        new_protocol_types: &[ProtocolType],
+    ) -> Result<(), StorageError> {
         self.state_gateway
             .add_protocol_types(new_protocol_types)
             .await
-            .expect("Couldn't insert protocol types");
     }
 
     async fn advance(
@@ -1676,13 +1812,13 @@ impl ExtractorGateway for ExtractorPgGateway {
             let hash: TxHash = tx_update.tx.hash.clone();
 
             // Map new protocol components
-            for (_component_id, new_protocol_component) in tx_update.protocol_components.iter() {
+            for new_protocol_component in tx_update.protocol_components.values() {
                 new_protocol_components.push(new_protocol_component.clone());
                 protocol_tokens.extend(new_protocol_component.tokens.clone());
             }
 
             // Map new accounts/contracts
-            for (_, account_update) in tx_update.account_deltas.iter() {
+            for account_update in tx_update.account_deltas.values() {
                 if account_update.is_creation() {
                     let new: Account = account_update.ref_into_account(&tx_update.tx);
                     info!(block_number = ?changes.block.number, contract_address = ?new.address, "NewContract");
@@ -1961,7 +2097,7 @@ mod test {
         let mut gw = MockExtractorGateway::new();
         gw.expect_ensure_protocol_types()
             .times(1)
-            .returning(|_| ());
+            .returning(|_| Ok(()));
         gw.expect_get_cursor()
             .times(1)
             .returning(|| Ok(("cursor".into(), Bytes::default())));
@@ -1980,7 +2116,7 @@ mod test {
         let mut gw = MockExtractorGateway::new();
         gw.expect_ensure_protocol_types()
             .times(1)
-            .returning(|_| ());
+            .returning(|_| Ok(()));
         gw.expect_get_cursor()
             .times(1)
             .returning(|| Ok(("cursor".into(), Bytes::default())));
@@ -2030,7 +2166,7 @@ mod test {
 
         gw.expect_ensure_protocol_types()
             .times(1)
-            .returning(|_| ());
+            .returning(|_| Ok(()));
         gw.expect_get_cursor()
             .times(1)
             .returning(|| Ok(("cursor".into(), Bytes::default())));
@@ -2177,7 +2313,7 @@ mod test {
         let mut gw = MockExtractorGateway::new();
         gw.expect_ensure_protocol_types()
             .times(1)
-            .returning(|_| ());
+            .returning(|_| Ok(()));
         gw.expect_get_cursor()
             .times(1)
             .returning(|| Ok(("cursor".into(), Bytes::default())));
@@ -2229,7 +2365,7 @@ mod test {
         let mut gw = MockExtractorGateway::new();
         gw.expect_ensure_protocol_types()
             .times(1)
-            .returning(|_| ());
+            .returning(|_| Ok(()));
         gw.expect_get_cursor()
             .times(1)
             .returning(|| Ok(("cursor".into(), Bytes::default())));
@@ -2262,7 +2398,7 @@ mod test {
         let mut gw = MockExtractorGateway::new();
         gw.expect_ensure_protocol_types()
             .times(1)
-            .returning(|_| ());
+            .returning(|_| Ok(()));
         gw.expect_get_cursor()
             .times(1)
             .returning(|| Ok(("cursor".into(), Bytes::default())));
@@ -2495,7 +2631,7 @@ mod test {
         extractor_gw
             .expect_ensure_protocol_types()
             .times(1)
-            .returning(|_| ());
+            .returning(|_| Ok(()));
         extractor_gw
             .expect_get_cursor()
             .times(1)
@@ -2627,7 +2763,7 @@ mod test {
         extractor_gw
             .expect_ensure_protocol_types()
             .times(1)
-            .returning(|_| ());
+            .returning(|_| Ok(()));
         extractor_gw
             .expect_get_cursor()
             .times(1)
@@ -2744,7 +2880,7 @@ mod test {
         let mut gw = MockExtractorGateway::new();
         gw.expect_ensure_protocol_types()
             .times(1)
-            .returning(|_| ());
+            .returning(|_| Ok(()));
         gw.expect_get_cursor()
             .times(1)
             .returning(|| Ok(("cursor".into(), Bytes::default())));
@@ -2860,7 +2996,7 @@ mod test {
         let mut gw = MockExtractorGateway::new();
         gw.expect_ensure_protocol_types()
             .times(1)
-            .returning(|_| ());
+            .returning(|_| Ok(()));
         gw.expect_get_cursor()
             .times(1)
             .returning(|| Ok(("cursor".into(), Bytes::default())));
@@ -2888,7 +3024,7 @@ mod test {
         let mut gw = MockExtractorGateway::new();
         gw.expect_ensure_protocol_types()
             .times(1)
-            .returning(|_| ());
+            .returning(|_| Ok(()));
         gw.expect_get_cursor()
             .times(1)
             .returning(|| Ok(("cursor".into(), Bytes::default())));
@@ -2932,7 +3068,7 @@ mod test {
         let mut gw = MockExtractorGateway::new();
         gw.expect_ensure_protocol_types()
             .times(1)
-            .returning(|_| ());
+            .returning(|_| Ok(()));
         gw.expect_get_cursor()
             .times(1)
             .returning(|| Ok(("cursor".into(), Bytes::default())));
@@ -3043,7 +3179,7 @@ mod test {
         let mut gw = MockExtractorGateway::new();
         gw.expect_ensure_protocol_types()
             .times(1)
-            .returning(|_| ());
+            .returning(|_| Ok(()));
         gw.expect_get_cursor()
             .times(1)
             .returning(|| Ok(("cursor".into(), Bytes::default())));
@@ -3153,6 +3289,163 @@ mod test {
                 "Revert message missing account delta at {addr:x} from partial block 3"
             );
         }
+    }
+
+    // Tests that reverting a partial block containing a brand-new attribute on a non-finalized
+    // component does not crash. Prior to the fix, the code errored with "Could not find Component"
+    // because the component was non-finalized (absent from DB) and the attribute had no prior
+    // value in the remaining buffer. The expected behavior is to emit a deletion for the attribute.
+    #[tokio::test]
+    async fn test_revert_new_attribute_on_non_finalized_component() {
+        use ::tycho_substreams::pb::tycho::evm::v1::{
+            Attribute, BlockChanges as PbBlockChanges, ChangeType as PbChangeType, EntityChanges,
+            ProtocolComponent as PbProtocolComponent, ProtocolType, TransactionChanges,
+        };
+
+        let mut gw = MockExtractorGateway::new();
+        gw.expect_ensure_protocol_types()
+            .times(1)
+            .returning(|_| Ok(()));
+        gw.expect_get_cursor()
+            .times(1)
+            .returning(|| Ok(("cursor".into(), Bytes::default())));
+        gw.expect_get_block()
+            .times(1)
+            .returning(|_| Ok(Block::default()));
+        gw.expect_advance()
+            .times(0)
+            .returning(|_, _, _| Ok(()));
+        gw.expect_get_contracts()
+            .returning(|_| Ok(Vec::new()));
+        // Component is non-finalized: not in DB.
+        gw.expect_get_protocol_states()
+            .returning(|_| Ok(Vec::new()));
+        gw.expect_get_components_balances()
+            .returning(|_| Ok(HashMap::new()));
+        gw.expect_get_account_balances()
+            .returning(|_| Ok(HashMap::new()));
+
+        let extractor = create_extractor(gw).await;
+
+        // Block 1: empty anchor.
+        extractor
+            .handle_tick_scoped_data(pb_fixtures::pb_block_scoped_data(
+                PbBlockChanges { block: Some(pb_fixtures::pb_blocks(1)), ..Default::default() },
+                Some("cursor@1"),
+                Some(1),
+            ))
+            .await
+            .unwrap()
+            .unwrap();
+
+        // Block 2: create `pool_x` with initial attributes. Non-finalized (stays in buffer).
+        extractor
+            .handle_tick_scoped_data(pb_fixtures::pb_block_scoped_data(
+                PbBlockChanges {
+                    block: Some(pb_fixtures::pb_blocks(2)),
+                    changes: vec![TransactionChanges {
+                        tx: Some(pb_fixtures::pb_transactions(2, 0)),
+                        component_changes: vec![PbProtocolComponent {
+                            id: "pool_x".to_string(),
+                            change: PbChangeType::Creation.into(),
+                            protocol_type: Some(ProtocolType {
+                                name: "pt_1".to_string(),
+                                ..Default::default()
+                            }),
+                            ..Default::default()
+                        }],
+                        entity_changes: vec![EntityChanges {
+                            component_id: "pool_x".to_string(),
+                            attributes: vec![
+                                Attribute {
+                                    name: "sqrt_price_x96".to_string(),
+                                    value: Bytes::from(1000_u64)
+                                        .lpad(32, 0)
+                                        .to_vec(),
+                                    change: PbChangeType::Creation.into(),
+                                },
+                                Attribute {
+                                    name: "tick".to_string(),
+                                    value: Bytes::from(100_u64)
+                                        .lpad(32, 0)
+                                        .to_vec(),
+                                    change: PbChangeType::Creation.into(),
+                                },
+                            ],
+                        }],
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                },
+                Some("cursor@2"),
+                Some(1),
+            ))
+            .await
+            .unwrap()
+            .unwrap();
+
+        // Partial block 3: first-ever tick attribute on `pool_x` (ChangeType::Creation).
+        let mut partial = pb_fixtures::pb_block_scoped_data(
+            PbBlockChanges {
+                block: Some(pb_fixtures::pb_blocks(3)),
+                changes: vec![TransactionChanges {
+                    tx: Some(pb_fixtures::pb_transactions(3, 0)),
+                    entity_changes: vec![EntityChanges {
+                        component_id: "pool_x".to_string(),
+                        attributes: vec![Attribute {
+                            name: "ticks/100/net-liquidity".to_string(),
+                            value: Bytes::from(5000_u64)
+                                .lpad(32, 0)
+                                .to_vec(),
+                            change: PbChangeType::Creation.into(),
+                        }],
+                    }],
+                    ..Default::default()
+                }],
+                ..Default::default()
+            },
+            Some("cursor@3_p0"),
+            Some(1),
+        );
+        partial.partial_index = Some(0);
+        partial.is_partial = true;
+        extractor
+            .handle_tick_scoped_data(partial)
+            .await
+            .unwrap()
+            .unwrap();
+
+        // Revert to block 2 — partial block 3 is reverted.
+        let revert_msg = extractor
+            .handle_revert(BlockUndoSignal {
+                last_valid_block: Some(BlockRef { id: format!("0x{:0>64x}", 2_u64), number: 2 }),
+                last_valid_cursor: "cursor@2".into(),
+            })
+            .await
+            .expect("handle_revert should not error for non-finalized component with new attr")
+            .expect("handle_revert should return a revert message");
+
+        assert!(revert_msg.revert);
+
+        // The revert delta for pool_x must tell consumers to delete the new tick attribute.
+        let pool_x_delta = revert_msg
+            .state_deltas
+            .get("pool_x")
+            .expect("state_deltas should contain pool_x");
+        assert!(
+            pool_x_delta
+                .deleted_attributes
+                .contains("ticks/100/net-liquidity"),
+            "Expected ticks/100/net-liquidity in deleted_attributes, got: {:?}",
+            pool_x_delta.deleted_attributes
+        );
+        assert!(
+            pool_x_delta
+                .updated_attributes
+                .is_empty(),
+            "Expected no updated_attributes for pool_x, got: {:?}",
+            pool_x_delta.updated_attributes
+        );
     }
 }
 
@@ -3801,6 +4094,7 @@ mod test_serial_db {
                             ("attr_1".to_string(), Bytes::from(1000_u64).lpad(32, 0)),
                         ]),
                         deleted_attributes: HashSet::new(),
+                        ..Default::default()
                     }),
                 ]),
                 new_protocol_components: HashMap::from([

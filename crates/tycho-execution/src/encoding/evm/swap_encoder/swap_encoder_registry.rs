@@ -10,12 +10,13 @@ use crate::encoding::{
             aerodrome_v1::AerodromeV1SwapEncoder, balancer_v2::BalancerV2SwapEncoder,
             balancer_v3::BalancerV3SwapEncoder, bebop::BebopSwapEncoder, curve::CurveSwapEncoder,
             ekubo::EkuboSwapEncoder, ekubo_v3::EkuboV3SwapEncoder, erc_4626::ERC4626SwapEncoder,
-            etherfi::EtherfiSwapEncoder, fluid_v1::FluidV1SwapEncoder,
+            etherfi::EtherfiSwapEncoder, fermiswap::FermiSwapEncoder, fluid_v1::FluidV1SwapEncoder,
             hashflow::HashflowSwapEncoder, liquidity_party::LiquidityPartySwapEncoder,
-            liquorice::LiquoriceSwapEncoder, maverick_v2::MaverickV2SwapEncoder,
+            liquorice::LiquoriceSwapEncoder, lunarbase::LunarBaseSwapEncoder,
+            maverick_v2::MaverickV2SwapEncoder, native_wrap::WrapSwapEncoder,
             rocketpool::RocketpoolSwapEncoder, slipstreams::SlipstreamsSwapEncoder,
             uniswap_v2::UniswapV2SwapEncoder, uniswap_v3::UniswapV3SwapEncoder,
-            uniswap_v4::UniswapV4SwapEncoder, weth::WethSwapEncoder,
+            uniswap_v4::UniswapV4SwapEncoder,
         },
     },
     swap_encoder::SwapEncoder,
@@ -32,6 +33,11 @@ pub struct SwapEncoderRegistry {
 impl SwapEncoderRegistry {
     pub fn new(chain: Chain) -> Self {
         Self { chain, encoders: HashMap::new() }
+    }
+
+    /// Creates a new registry pre-populated with all default encoders for the given chain.
+    pub fn new_with_defaults(chain: Chain) -> Result<Self, EncodingError> {
+        Self::new(chain).add_default_encoders(None)
     }
 
     /// Populates the registry with the default `SwapEncoders` for the given blockchain by
@@ -95,13 +101,7 @@ impl SwapEncoderRegistry {
         config: Option<HashMap<String, String>>,
     ) -> Result<Box<dyn SwapEncoder>, EncodingError> {
         match protocol_system {
-            "uniswap_v2" => {
-                Ok(Box::new(UniswapV2SwapEncoder::new(executor_address, self.chain, config)?))
-            }
-            "sushiswap_v2" => {
-                Ok(Box::new(UniswapV2SwapEncoder::new(executor_address, self.chain, config)?))
-            }
-            "pancakeswap_v2" => {
+            "uniswap_v2" | "sushiswap_v2" | "pancakeswap_v2" | "quickswap_v2" => {
                 Ok(Box::new(UniswapV2SwapEncoder::new(executor_address, self.chain, config)?))
             }
             "aerodrome_v1" => {
@@ -110,10 +110,7 @@ impl SwapEncoderRegistry {
             "vm:balancer_v2" => {
                 Ok(Box::new(BalancerV2SwapEncoder::new(executor_address, self.chain, config)?))
             }
-            "uniswap_v3" => {
-                Ok(Box::new(UniswapV3SwapEncoder::new(executor_address, self.chain, config)?))
-            }
-            "pancakeswap_v3" => {
+            "uniswap_v3" | "pancakeswap_v3" => {
                 Ok(Box::new(UniswapV3SwapEncoder::new(executor_address, self.chain, config)?))
             }
             "uniswap_v4" => {
@@ -146,6 +143,9 @@ impl SwapEncoderRegistry {
             "fluid_v1" => {
                 Ok(Box::new(FluidV1SwapEncoder::new(executor_address, self.chain, config)?))
             }
+            "vm:fermiswap" => {
+                Ok(Box::new(FermiSwapEncoder::new(executor_address, self.chain, config)?))
+            }
             "vm:liquidityparty" => {
                 Ok(Box::new(LiquidityPartySwapEncoder::new(executor_address, self.chain, config)?))
             }
@@ -158,10 +158,15 @@ impl SwapEncoderRegistry {
             "erc4626" => {
                 Ok(Box::new(ERC4626SwapEncoder::new(executor_address, self.chain, config)?))
             }
+            "lunarbase" => {
+                Ok(Box::new(LunarBaseSwapEncoder::new(executor_address, self.chain, config)?))
+            }
             "velodrome_slipstreams" => {
                 Ok(Box::new(SlipstreamsSwapEncoder::new(executor_address, self.chain, config)?))
             }
-            "weth" => Ok(Box::new(WethSwapEncoder::new(executor_address, self.chain, config)?)),
+            "native_wrapper" => {
+                Ok(Box::new(WrapSwapEncoder::new(executor_address, self.chain, config)?))
+            }
             "etherfi" => {
                 Ok(Box::new(EtherfiSwapEncoder::new(executor_address, self.chain, config)?))
             }

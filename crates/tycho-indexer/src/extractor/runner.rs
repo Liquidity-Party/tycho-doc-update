@@ -99,6 +99,13 @@ impl<AE: AccountExtractor + Send + Sync> ExtractorExtension for DCIPlugin<AE> {
             DCIPlugin::UniswapV4Hooks(hooks_dci) => hooks_dci.cache_size(),
         }
     }
+
+    fn emit_cache_metrics(&self, chain: &str, extractor: &str) {
+        match self {
+            DCIPlugin::Standard(dci) => dci.emit_cache_metrics(chain, extractor),
+            DCIPlugin::UniswapV4Hooks(hooks_dci) => hooks_dci.emit_cache_metrics(chain, extractor),
+        }
+    }
 }
 pub enum ControlMessage {
     Stop,
@@ -356,6 +363,7 @@ impl ExtractorRunner {
     /// Processes block-scoped data from the stream: always sends the input to the extractor,
     /// then optionally adds a partial copy of the message (for full blocks with partials enabled)
     /// and/or the result of collect_and_process_full_block (for final partials).
+    #[instrument(skip_all, fields(partial_blocks_enabled, is_partial = data.is_partial))]
     async fn process_block_data(
         extractor: &dyn Extractor,
         data: &BlockScopedData,
@@ -410,7 +418,7 @@ impl ExtractorRunner {
     }
 
     // TODO: add message tracing_id to the log
-    #[instrument(skip_all)]
+    #[instrument(skip_all, fields(subscriber_count))]
     async fn propagate_msg(subscribers: &Arc<Mutex<SubscriptionsMap>>, message: ExtractorMsg) {
         trace!(msg = %message, "Propagating message to subscribers.");
         // TODO: rename variable here instead
@@ -420,6 +428,7 @@ impl ExtractorRunner {
 
         // Lock the subscribers HashMap for exclusive access
         let mut subscribers = subscribers.lock().await;
+        tracing::Span::current().record("subscriber_count", subscribers.len());
 
         for (counter, sender) in subscribers.iter_mut() {
             match sender.send(arced_message.clone()).await {
@@ -611,7 +620,7 @@ impl ExtractorBuilder {
                 self.s3_bucket.as_ref().ok_or_else(|| {
                     ExtractionError::Setup(format!(
                         "Missing spkg and s3 bucket config for {}",
-                        &self.config.spkg
+                        self.config.spkg
                     ))
                 })?,
                 &self.config.spkg,
@@ -621,7 +630,7 @@ impl ExtractorBuilder {
             .map_err(|e| {
                 ExtractionError::Setup(format!(
                     "Failed to download {} from s3. {}",
-                    &self.config.spkg, e
+                    self.config.spkg, e
                 ))
             })?;
         }

@@ -14,7 +14,7 @@ use clap::{Args, Parser, Subcommand};
 use dotenv::dotenv;
 use miette::{miette, IntoDiagnostic, WrapErr};
 use tracing_subscriber::EnvFilter;
-use tycho_simulation::tycho_common::dto::Chain;
+use tycho_simulation::tycho_common::models::Chain;
 
 use crate::test_runner::{TestRunner, TestType, TestTypeFull, TestTypeRange};
 
@@ -137,23 +137,24 @@ impl CommonArgs {
                 let current_dir = std::env::current_dir()
                     .into_diagnostic()
                     .wrap_err("Failed to get current directory")?;
-                let expected_child_dirs = ["evm", "proto", "substreams"];
-                if expected_child_dirs
-                    .iter()
-                    .all(|dir| current_dir.join(dir).exists())
-                {
-                    return Ok(current_dir);
+                let expected_child_dirs = ["substreams", "adapter-integration/evm"];
+                let mut dir = current_dir.as_path();
+                loop {
+                    if expected_child_dirs
+                        .iter()
+                        .all(|child| dir.join(child).exists())
+                    {
+                        return Ok(dir.to_path_buf());
+                    }
+                    dir = dir.parent().ok_or_else(|| {
+                        miette!(
+                            "Couldn't find a valid root path (containing \
+                             substreams/ and adapter-integration/evm/) \
+                             in any ancestor of {}",
+                            current_dir.display()
+                        )
+                    })?;
                 }
-                let parent_dir = current_dir
-                    .parent()
-                    .ok_or_else(|| miette!("Current directory has no parent directory"))?;
-                if expected_child_dirs
-                    .iter()
-                    .all(|dir| parent_dir.join(dir).exists())
-                {
-                    return Ok(parent_dir.to_path_buf());
-                }
-                Err(miette!("Couldn't find a valid path from {}", current_dir.display()))
             }
         }
     }

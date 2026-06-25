@@ -12,6 +12,7 @@ import {TychoRouter} from "../TychoRouter.sol";
 
 error CurveExecutor__AddressZero();
 error CurveExecutor__InvalidDataLength();
+error CurveExecutor__TokenAddressZero();
 
 interface CryptoPool {
     function exchange(uint256 i, uint256 j, uint256 dx, uint256 minDy)
@@ -121,6 +122,9 @@ contract CurveExecutor is IExecutor {
     {
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[20:40]));
+        if (tokenIn == address(0) || tokenOut == address(0)) {
+            revert CurveExecutor__TokenAddressZero();
+        }
         pool = address(bytes20(data[40:60]));
         poolType = uint8(data[60]);
         i = int128(uint128(uint8(data[61])));
@@ -138,7 +142,7 @@ contract CurveExecutor is IExecutor {
 
     function getTransferData(bytes calldata data)
         external
-        payable
+        view
         returns (
             TransferManager.TransferType transferType,
             address receiver,
@@ -149,19 +153,13 @@ contract CurveExecutor is IExecutor {
     {
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[20:40]));
+        if (tokenIn == address(0) || tokenOut == address(0)) {
+            revert CurveExecutor__TokenAddressZero();
+        }
         if (tokenIn == nativeToken) {
-            // ETH transfers are handled in the Executor, so we need to set the transferType to TransferNativeInExecutor
-            // to update the delta accounting accordingly.
-            tokenIn = address(0);
             transferType = TransferManager.TransferType.TransferNativeInExecutor;
         } else {
             transferType = TransferManager.TransferType.ProtocolWillDebit;
-        }
-        // This is necessary because Curve's native token is 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE and TychoRouter
-        // uses the address(0) instead. The tokenOut is then later used on some internal accounting across the entire
-        // swap by the TychoRouter, so it is relevant that we are consistent.
-        if (tokenOut == nativeToken) {
-            tokenOut = address(0);
         }
         // The receiver of the funds will be the pool contract. This is only relevant
         // for performing an approval in the case of ProtocolWillDebit.

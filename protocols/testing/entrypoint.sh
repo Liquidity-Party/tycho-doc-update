@@ -28,14 +28,60 @@ if [ "${#errors[@]}" -ne 0 ]; then
     exit 1
 fi
 
+# Infer the chain from the protocol name prefix.
+infer_chain() {
+    local protocol="$1"
+    case "$protocol" in
+        base-*)     echo "base" ;;
+        arbitrum-*) echo "arbitrum" ;;
+        unichain-*) echo "unichain" ;;
+        bsc-*)      echo "bsc" ;;
+        polygon-*)  echo "polygon" ;;
+        *)          echo "ethereum" ;;
+    esac
+}
+
+# Return the appropriate RPC URL for the given protocol.
+# Chain-specific URLs fall back to the generic RPC_URL if not set.
+get_rpc_url() {
+    local protocol="$1"
+    case "$protocol" in
+        base-*)     echo "${BASE_RPC_URL:-$RPC_URL}" ;;
+        arbitrum-*) echo "${ARBITRUM_RPC_URL:-$RPC_URL}" ;;
+        unichain-*) echo "${UNICHAIN_RPC_URL:-$RPC_URL}" ;;
+        bsc-*)      echo "${BSC_RPC_URL:-$RPC_URL}" ;;
+        polygon-*)  echo "${POLYGON_RPC_URL:-$RPC_URL}" ;;
+        *)          echo "$RPC_URL" ;;
+    esac
+}
+
+# Test mode: "range" (block ranges from the yaml, default) or "full" (continuous sync from the
+# initial block to the chain tip). Full mode runs indefinitely.
+MODE="${MODE:-range}"
+case "$MODE" in
+	range|full) ;;
+	*) echo "Invalid MODE '$MODE' (expected 'range' or 'full')"; exit 1 ;;
+esac
+
 # Run tests
 for test in "${args[@]}"; do
 	protocol="${test%%=*}"
-	filter="${test#*=}"
-	echo "Running tests for protocol: $protocol with filter: $filter"
+	suffix="${test#*=}"
+	chain=$(infer_chain "$protocol")
+	rpc_url=$(get_rpc_url "$protocol")
+	export RPC_URL="$rpc_url"
+	echo "Running '$MODE' tests for protocol: $protocol (chain: $chain)"
+	cmd=(tycho-protocol-sdk "$MODE" --package "$protocol" --chain "$chain" \
+		--rpc-url "$rpc_url" --db-url "$DATABASE_URL")
+	# The "=" suffix in PROTOCOLS means different things per mode:
+	#   range → --match-test (run one named test case)
+	#   full  → --initial-block (start syncing from this block)
 	if [[ "$test" == *"="* ]]; then
-		tycho-protocol-sdk range --package "$protocol" --db-url "$DATABASE_URL" --match-test "$filter"
-	else
-	  tycho-protocol-sdk range --package "$protocol" --db-url "$DATABASE_URL"
+		if [ "$MODE" = "full" ]; then
+			cmd+=(--initial-block "$suffix")
+		else
+			cmd+=(--match-test "$suffix")
+		fi
 	fi
+	"${cmd[@]}"
 done

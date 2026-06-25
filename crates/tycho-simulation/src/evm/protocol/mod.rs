@@ -1,4 +1,5 @@
 pub mod aerodrome_slipstreams;
+pub mod aerodrome_v1;
 mod clmm;
 pub mod cowamm;
 mod cpmm;
@@ -8,6 +9,8 @@ pub mod erc4626;
 pub mod etherfi;
 pub mod filters;
 pub mod fluid;
+pub mod lunarbase;
+pub mod native_wrapper;
 pub mod pancakeswap_v2;
 pub mod rocketpool;
 pub mod safe_math;

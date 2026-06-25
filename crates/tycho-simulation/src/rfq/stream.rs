@@ -95,10 +95,10 @@ impl RFQStreamBuilder {
         Ok(())
     }
 
-    /// Sets the currently known tokens which to be considered during decoding.
+    /// Provides token metadata used to decode startup snapshots and initialize protocol states.
     ///
-    /// Protocol components containing tokens which are not included in this initial list, or
-    /// added when applying deltas, will not be decoded.
+    /// This is not an ongoing stream filter. Components arriving after startup include their
+    /// own token metadata for decoding.
     pub async fn set_tokens(self, tokens: HashMap<Bytes, Token>) -> Self {
         self.decoder.set_tokens(tokens).await;
         self
@@ -117,8 +117,11 @@ mod tests {
     use tokio_stream::wrappers::IntervalStream;
     use tycho_client::feed::synchronizer::{Snapshot, StateSyncMessage};
     use tycho_common::{
-        dto::{ProtocolComponent, ProtocolStateDelta, ResponseProtocolState},
-        models::{protocol::GetAmountOutParams, token::Token},
+        dto::ProtocolStateDelta,
+        models::{
+            protocol::{GetAmountOutParams, ProtocolComponent, ProtocolComponentState},
+            token::Token,
+        },
         simulation::{
             errors::{SimulationError, TransitionError},
             indicatively_priced::SignedQuote,
@@ -236,7 +239,7 @@ mod tests {
                         states: HashMap::from([(
                             name.clone(),
                             ComponentWithState {
-                                state: ResponseProtocolState {
+                                state: ProtocolComponentState {
                                     component_id: name.clone(),
                                     attributes: HashMap::new(),
                                     balances: HashMap::new(),

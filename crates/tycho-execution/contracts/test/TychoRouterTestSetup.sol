@@ -8,6 +8,7 @@ import {CurveExecutor} from "../src/executors/CurveExecutor.sol";
 import {EkuboExecutor} from "../src/executors/EkuboExecutor.sol";
 import {EkuboV3Executor} from "../src/executors/EkuboV3Executor.sol";
 import {EtherfiExecutor} from "../src/executors/EtherfiExecutor.sol";
+import {FermiSwapExecutor} from "../src/executors/FermiSwapExecutor.sol";
 import {
     LiquidityPartyExecutor
 } from "../src/executors/LiquidityPartyExecutor.sol";
@@ -23,7 +24,7 @@ import {FluidV1Executor} from "../src/executors/FluidV1Executor.sol";
 import {SlipstreamsExecutor} from "../src/executors/SlipstreamsExecutor.sol";
 import {RocketpoolExecutor} from "../src/executors/RocketpoolExecutor.sol";
 import {ERC4626Executor} from "../src/executors/ERC4626Executor.sol";
-import {WethExecutor} from "../src/executors/WethExecutor.sol";
+import {NativeWrapExecutor} from "../src/executors/NativeWrapExecutor.sol";
 import {LiquoriceExecutor} from "../src/executors/LiquoriceExecutor.sol";
 import {AerodromeV1Executor} from "../src/executors/AerodromeV1Executor.sol";
 // Test utilities and mocks
@@ -86,6 +87,10 @@ contract TychoRouterExposed is TychoRouter {
     function exposedDeltaAccounting(address token, uint256 amount) external {
         _updateDeltaAccounting(token, int256(amount));
     }
+
+    function exposedGetFeeCalculator() external view returns (address) {
+        return this.getFeeCalculator();
+    }
 }
 
 contract TychoRouterTestSetup is
@@ -111,12 +116,13 @@ contract TychoRouterTestSetup is
     SlipstreamsExecutor public slipstreamsExecutor;
     RocketpoolExecutor public rocketpoolExecutor;
     ERC4626Executor public erc4626Executor;
-    WethExecutor public wethExecutor;
+    NativeWrapExecutor public nativeWrapExecutor;
     EkuboV3Executor public ekuboV3Executor;
     EtherfiExecutor public etherfiExecutor;
     LiquidityPartyExecutor public liquidityPartyExecutor;
     LiquoriceExecutor public liquoriceExecutor;
     AerodromeV1Executor public aerodromeV1Executor;
+    FermiSwapExecutor public fermiSwapExecutor;
 
     FeeCalculator feeCalculator;
     address routerFeeReceiver;
@@ -155,7 +161,10 @@ contract TychoRouterTestSetup is
         deployFeeCalculator();
         vm.prank(FEE_SETTER);
         tychoRouter.setFeeCalculator(address(feeCalculator));
-        vm.stopPrank();
+        // Warp past the timelock and activate
+        vm.warp(block.timestamp + tychoRouter.DELAY_FEE_CALCULATOR_ACTIVATION());
+        vm.prank(FEE_SETTER);
+        tychoRouter.activateFeeCalculator();
         vm.warp(forkTimestamp);
     }
 
@@ -190,7 +199,7 @@ contract TychoRouterTestSetup is
         pancakev3Executor = new UniswapV3Executor();
         balancerv2Executor = new BalancerV2Executor();
         ekuboExecutor = new EkuboExecutor(ekuboCore, ekuboMevResist);
-        curveExecutor = new CurveExecutor(ETH_ADDR_FOR_CURVE, STETH_ADDR);
+        curveExecutor = new CurveExecutor(ETH_ADDR, STETH_ADDR);
         maverickv2Executor = new MaverickV2Executor();
         balancerV3Executor = new BalancerV3Executor();
         bebopExecutor = new BebopExecutor(BEBOP_SETTLEMENT);
@@ -199,22 +208,41 @@ contract TychoRouterTestSetup is
         slipstreamsExecutor = new SlipstreamsExecutor();
         rocketpoolExecutor = new RocketpoolExecutor(ROCKET_DEPOSIT_POOL);
         erc4626Executor = new ERC4626Executor();
-        wethExecutor = new WethExecutor(WETH_ADDR);
+        nativeWrapExecutor = new NativeWrapExecutor(WETH_ADDR);
         ekuboV3Executor = new EkuboV3Executor();
+        // Etch placeholder bytecode if Etherfi contracts are not yet deployed
+        // on this chain/block (e.g. non-mainnet forks or early mainnet blocks).
+        if (EETH_ADDR.code.length == 0) vm.etch(EETH_ADDR, bytes("1"));
+        if (LIQUIDITY_POOL_ADDR.code.length == 0) {
+            vm.etch(LIQUIDITY_POOL_ADDR, bytes("1"));
+        }
+        if (WEETH_ADDR.code.length == 0) vm.etch(WEETH_ADDR, bytes("1"));
+        if (REDEMPTION_MANAGER_ADDR.code.length == 0) {
+            vm.etch(REDEMPTION_MANAGER_ADDR, bytes("1"));
+        }
         etherfiExecutor = new EtherfiExecutor(
-            ETH_ADDR_FOR_CURVE,
+            ETH_ADDR,
             EETH_ADDR,
             LIQUIDITY_POOL_ADDR,
             WEETH_ADDR,
             REDEMPTION_MANAGER_ADDR
         );
+        // Etch placeholder bytecode if Liquorice contracts are not yet
+        // deployed at this fork block.
+        if (LIQUORICE_SETTLEMENT.code.length == 0) {
+            vm.etch(LIQUORICE_SETTLEMENT, bytes("1"));
+        }
+        if (LIQUORICE_BALANCE_MANAGER.code.length == 0) {
+            vm.etch(LIQUORICE_BALANCE_MANAGER, bytes("1"));
+        }
         liquoriceExecutor = new LiquoriceExecutor(
             LIQUORICE_SETTLEMENT, LIQUORICE_BALANCE_MANAGER
         );
         liquidityPartyExecutor = new LiquidityPartyExecutor();
         aerodromeV1Executor = new AerodromeV1Executor();
+        fermiSwapExecutor = new FermiSwapExecutor(FERMI_SWAPPER);
 
-        address[] memory executors = new address[](21);
+        address[] memory executors = new address[](22);
         executors[0] = address(usv2Executor);
         executors[1] = address(usv3Executor);
         executors[2] = address(pancakev3Executor);
@@ -230,12 +258,13 @@ contract TychoRouterTestSetup is
         executors[12] = address(slipstreamsExecutor);
         executors[13] = address(rocketpoolExecutor);
         executors[14] = address(erc4626Executor);
-        executors[15] = address(wethExecutor);
+        executors[15] = address(nativeWrapExecutor);
         executors[16] = address(ekuboV3Executor);
         executors[17] = address(etherfiExecutor);
         executors[18] = address(liquoriceExecutor);
         executors[19] = address(liquidityPartyExecutor);
         executors[20] = address(aerodromeV1Executor);
+        executors[21] = address(fermiSwapExecutor);
         return executors;
     }
 

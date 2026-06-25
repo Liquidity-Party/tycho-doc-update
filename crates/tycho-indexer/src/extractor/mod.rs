@@ -93,7 +93,10 @@ pub trait Extractor: Send + Sync {
 
     /// Ensures all protocol types this extractor needs are registered in
     /// storage. Safe to call multiple times.
-    async fn ensure_protocol_types(&self);
+    ///
+    /// # Errors
+    /// Returns an [`ExtractionError`] if the protocol types could not be persisted.
+    async fn ensure_protocol_types(&self) -> Result<(), ExtractionError>;
 
     /// Returns the current stream cursor, or an empty string if no block has
     /// been processed yet. At startup this reflects the last persisted cursor;
@@ -144,6 +147,9 @@ pub trait ExtractorExtension: Send + Sync {
 
     /// Returns the approximate size of the internal cache used by this extension, in bytes.
     fn cache_size(&self) -> usize;
+
+    /// Emits granular cache metrics (per-sub-cache size, key counts, top tracked contracts).
+    fn emit_cache_metrics(&self, _chain: &str, _extractor: &str) {}
 }
 
 /// Wrapper to carry a cursor along with another struct.

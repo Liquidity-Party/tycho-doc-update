@@ -9,11 +9,19 @@ You ask for a quote for a specific trade size, and they return a price. Quotes c
 
 Tycho supports streaming, simulating, and executing RFQ quotes as part of multi-protocol swaps.
 
+Currently, Tycho supports the following RFQ protocols:
+
+| Protocol    | Simulation Time |
+| ----------- | --------------- |
+| `bebop`     | 0.5 µs          |
+| `hashflow`  | 0.4 µs          |
+| `liquorice` | 0.4 µs          |
+
 ## Quickstart
 
 The RFQ quickstart is similar to the other protocols [quickstart](../).
 
-See the code [here](https://github.com/propeller-heads/tycho-indexer/tree/main/crates/tycho-simulation/examples/rfq_quickstart). As of now, [Bebop](https://docs.bebop.xyz/bebop/bebop-api-pmm-rfq/pmm-rfq-api-intro) and [Hashflow](https://docs.hashflow.com/hashflow/taker/getting-started-api-v3) are the only supported providers.
+See the code <a href="https://github.com/propeller-heads/tycho-indexer/tree/main/crates/tycho-simulation/examples/rfq_quickstart" target="_blank" rel="noopener noreferrer">here</a>. As of now, <a href="https://docs.bebop.xyz/bebop/bebop-api-pmm-rfq/pmm-rfq-api-intro" target="_blank" rel="noopener noreferrer">Bebop</a>, <a href="https://docs.hashflow.com/hashflow/taker/getting-started-api-v3" target="_blank" rel="noopener noreferrer">Hashflow</a> and <a href="https://liquorice.tech/" target="_blank" rel="noopener noreferrer">Liquorice</a> are the only supported providers.
 
 You need to set up the API credentials of the desired RFQs to access live pricing data and quoting, as well as your private key if you wish to execute against the Tycho Router:
 
@@ -22,6 +30,8 @@ export BEBOP_USER=<your-bebop-ws-username>
 export BEBOP_KEY=<your-bebop-ws-key>
 export HASHFLOW_USER=<your-hashflow-api-username>
 export HASHFLOW_KEY=<your-hashflow-api-key>
+export LIQUORICE_USER=<your-liquorice-api-username>
+export LIQUORICE_KEY=<your-liquorice-api-key>
 export PRIVATE_KEY=<your-wallet-private-key>
 ```
 
@@ -129,8 +139,8 @@ Build the Swap and Solution:
     Swap::new(component, sell_token.address.clone(), buy_token.address.clone())
         .protocol_state(state)
         .estimated_amount_in(sell_amount.clone());
-<strong>
-</strong><strong>let solution = Solution::new(
+
+<strong>let solution = Solution::new(
 </strong>    user_address.clone(),
     user_address,
     sell_token.address,
@@ -160,8 +170,7 @@ After encoding, quotes are valid for only 1–3 seconds. Execution must follow i
 #### Encode solution
 
 ```rust
-let swap_encoder_registry = SwapEncoderRegistry::new(Chain::Ethereum)
-    .add_default_encoders(None)
+let swap_encoder_registry = SwapEncoderRegistry::new_with_defaults(Chain::Ethereum)
     .expect("Failed to get default SwapEncoderRegistry");
     
 let encoder = TychoRouterEncoderBuilder::new()

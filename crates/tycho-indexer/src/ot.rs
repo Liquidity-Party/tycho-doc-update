@@ -1,7 +1,12 @@
 use anyhow::{Context, Result};
 use opentelemetry::global;
 use opentelemetry_otlp::WithExportConfig;
-use opentelemetry_sdk::{propagation::TraceContextPropagator, runtime, trace, Resource};
+use opentelemetry_sdk::{
+    propagation::TraceContextPropagator,
+    runtime,
+    trace::{self, BatchConfigBuilder},
+    Resource,
+};
 use serde::Deserialize;
 use tracing::{debug, error, Subscriber};
 use tracing_subscriber::{
@@ -16,6 +21,13 @@ pub struct TracingConfig {
 /// Initialize tracing: apply an `EnvFilter` using the `RUST_LOG` environment variable to define the
 /// log levels, add a formatter layer logging trace events as JSON and on OpenTelemetry layer
 /// exporting trace data.
+///
+/// The OTLP layer uses `RUST_LOG_OTLP` if set, otherwise falls back to `RUST_LOG`. This allows
+/// exporting detailed spans to Tempo without flooding stdout logs:
+///
+/// ```sh
+/// RUST_LOG=info RUST_LOG_OTLP=tycho_storage::postgres=debug
+/// ```
 pub fn init_tracing(config: TracingConfig) -> Result<()> {
     global::set_text_map_propagator(TraceContextPropagator::new());
 
@@ -35,12 +47,28 @@ pub fn init_tracing(config: TracingConfig) -> Result<()> {
         .with_target(false)
         .compact();
 
+    let fmt_filter = EnvFilter::from_default_env();
+    let otlp_filter = otlp_env_filter();
+
     tracing_subscriber::registry()
-        .with(EnvFilter::from_default_env())
-        .with(otlp_layer(config)?)
-        .with(tracing_subscriber::fmt::layer().event_format(format))
+        .with(otlp_layer(config)?.with_filter(otlp_filter))
+        .with(
+            tracing_subscriber::fmt::layer()
+                .event_format(format)
+                .with_filter(fmt_filter),
+        )
         .try_init()
         .context("initialize tracing subscriber")
+}
+
+/// Build the `EnvFilter` for the OTLP layer.
+/// Uses `RUST_LOG_OTLP` if set, otherwise falls back to `RUST_LOG` / default.
+fn otlp_env_filter() -> EnvFilter {
+    if let Ok(val) = std::env::var("RUST_LOG_OTLP") {
+        EnvFilter::new(val)
+    } else {
+        EnvFilter::from_default_env()
+    }
 }
 
 /// Create an OTLP layer exporting tracing data.
@@ -54,9 +82,10 @@ where
 
     let trace_config = trace::config().with_resource(Resource::default());
 
-    let batch_config = trace::BatchConfig::default()
+    let batch_config = BatchConfigBuilder::default()
         .with_max_queue_size(20_480)
-        .with_max_export_batch_size(2_560);
+        .with_max_export_batch_size(2_560)
+        .build();
 
     let tracer = opentelemetry_otlp::new_pipeline()
         .tracing()
