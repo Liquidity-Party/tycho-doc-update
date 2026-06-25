@@ -191,10 +191,8 @@ fn extract_maker_changes(
     components_store: &StoreGetProto<ProtocolComponent>,
     transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
 ) {
-    let books = enumerate_books(components_store);
-    if books.is_empty() {
-        return;
-    }
+    // Computed lazily on the first maker write so blocks without one do nothing.
+    let mut books: Option<Vec<String>> = None;
     for tx in block.transactions() {
         for call in tx
             .calls
@@ -209,11 +207,15 @@ fn extract_maker_changes(
                     continue;
                 }
                 let Some(maker) = change.new_value.get(12..32) else { continue };
+                let books = books.get_or_insert_with(|| enumerate_books(components_store));
+                if books.is_empty() {
+                    continue;
+                }
                 let transaction: Transaction = tx.into();
                 let builder = transaction_changes
                     .entry(transaction.index)
                     .or_insert_with(|| TransactionChangesBuilder::new(&transaction));
-                for book in &books {
+                for book in books.iter() {
                     builder.add_entity_change(&EntityChanges {
                         component_id: book.clone(),
                         attributes: vec![Attribute {
@@ -237,10 +239,8 @@ fn extract_pause_state(
     components_store: &StoreGetProto<ProtocolComponent>,
     transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
 ) {
-    let books = enumerate_books(components_store);
-    if books.is_empty() {
-        return;
-    }
+    // Computed lazily on the first pause/unpause log so blocks without one do nothing.
+    let mut books: Option<Vec<String>> = None;
     for log in block.logs() {
         if log.address() != config.settlement.as_slice() {
             continue;
@@ -253,11 +253,15 @@ fn extract_pause_state(
         } else {
             continue;
         };
+        let books = books.get_or_insert_with(|| enumerate_books(components_store));
+        if books.is_empty() {
+            continue;
+        }
         let tx: Transaction = log.receipt.transaction.into();
         let builder = transaction_changes
             .entry(tx.index)
             .or_insert_with(|| TransactionChangesBuilder::new(&tx));
-        for book in &books {
+        for book in books.iter() {
             builder.change_component_pause_state(book, paused);
         }
     }
@@ -274,18 +278,18 @@ fn mark_books_updated_on_module_changes(
     components_store: &StoreGetProto<ProtocolComponent>,
     transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
 ) {
-    let books = enumerate_books(components_store);
-    if books.is_empty() {
-        return;
-    }
+    // Computed lazily on the first builder that touches the module, then reused.
+    let mut books: Option<Vec<String>> = None;
     for builder in transaction_changes.values_mut() {
         let touches_module = builder
             .changed_contracts()
             .any(|addr| addr == config.module.as_slice());
-        if touches_module {
-            for book in &books {
-                builder.mark_component_as_updated(book);
-            }
+        if !touches_module {
+            continue;
+        }
+        let books = books.get_or_insert_with(|| enumerate_books(components_store));
+        for book in books.iter() {
+            builder.mark_component_as_updated(book);
         }
     }
 }

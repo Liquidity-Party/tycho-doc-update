@@ -55,14 +55,31 @@ pub fn is_zero(value: &[u8]) -> bool {
 }
 
 /// All currently-known book component ids, by probing the components store.
+///
+/// Probes `book:{i}` from id 0 upward and stops at the first miss. This short-circuit relies on
+/// two protocol invariants: asset ids are assigned sequentially with no gaps, and delisting is
+/// not supported (components are immutable; a book is never removed once created). If delisting
+/// is ever added the gap would truncate enumeration early and this must be revisited.
 pub fn enumerate_books(store: &StoreGetProto<ProtocolComponent>) -> Vec<String> {
-    (0..MAX_ASSET_ID)
-        .filter_map(|i| {
-            store
-                .get_last(format!("book:{i}"))
-                .map(|c| c.id)
-        })
-        .collect()
+    enumerate_books_from(|i| {
+        store
+            .get_last(format!("book:{i}"))
+            .map(|c| c.id)
+    })
+}
+
+/// Short-circuiting book enumeration over a probe of book id -> component id.
+///
+/// Returns ids for `0, 1, 2, ...` until `probe` first returns `None`. Split out from
+/// [`enumerate_books`] so the unbounded short-circuit can be tested without the WASM store.
+fn enumerate_books_from(probe: impl Fn(u64) -> Option<String>) -> Vec<String> {
+    let mut books = Vec::new();
+    let mut i = 0u64;
+    while let Some(id) = probe(i) {
+        books.push(id);
+        i += 1;
+    }
+    books
 }
 
 /// Store keys under which a book is indexed by token, one per token.
@@ -285,6 +302,39 @@ mod tests {
         let keys = token_index_keys(&[usdc.clone(), weth.clone()]);
         assert!(keys.contains(&format!("token:0x{}", hex::encode(&weth))));
         assert!(keys.contains(&format!("token:0x{}", hex::encode(&usdc))));
+    }
+
+    #[test]
+    fn enumerate_books_from_is_unbounded_and_sequential() {
+        // No upper bound: 100 sequential books are all enumerated.
+        let present: std::collections::HashSet<u64> = (0..100).collect();
+        let books = enumerate_books_from(|i| {
+            present
+                .contains(&i)
+                .then(|| format!("book:{i}"))
+        });
+        assert_eq!(books.len(), 100);
+        assert_eq!(books.first().map(String::as_str), Some("book:0"));
+        assert_eq!(books.last().map(String::as_str), Some("book:99"));
+    }
+
+    #[test]
+    fn enumerate_books_from_short_circuits_on_first_gap() {
+        // Ids 0,1,2 then a gap at 3: enumeration stops at the gap and never sees id 4, relying
+        // on the no-gap / no-delisting invariant documented on `enumerate_books`.
+        let present: std::collections::HashSet<u64> = [0, 1, 2, 4].into_iter().collect();
+        let books = enumerate_books_from(|i| {
+            present
+                .contains(&i)
+                .then(|| format!("book:{i}"))
+        });
+        assert_eq!(books, vec!["book:0", "book:1", "book:2"]);
+    }
+
+    #[test]
+    fn enumerate_books_from_empty_store_yields_nothing() {
+        let books = enumerate_books_from(|_| None);
+        assert!(books.is_empty());
     }
 
     #[test]
