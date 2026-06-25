@@ -31,11 +31,14 @@ use substreams_ethereum::{
 use substreams_helper::event_handler::EventHandler;
 use tycho_substreams::{
     abi::{erc20, weth},
-    attributes::json_serialize_address_list,
     balances::aggregate_balances_changes,
+    block_storage::get_block_storage_changes,
     contract::extract_contract_changes_builder,
+    entrypoint::create_entrypoint,
     prelude::*,
 };
+
+const ALLOWANCE_SIGNATURE: &str = "allowance(address,address)";
 
 #[substreams::handlers::map]
 fn map_protocol_components(params: String, block: Block) -> Result<BlockEntityChanges> {
@@ -61,13 +64,6 @@ fn get_new_pairs(
                 config.trader_vault.as_slice(),
                 config.registry_address.as_slice(),
             ])
-            // FermiSwap does not emit token contract storage, so its tokens are self-contained
-            // proxies in the shared simulation DB. Flag them so simulation never binds them to an
-            // implementation another VM protocol indexed for the same token.
-            .with_attributes(&[(
-                "self_contained_tokens",
-                json_serialize_address_list(&[event.base_asset.clone(), event.quote_asset.clone()]),
-            )])
             .as_swap_type("fermiswap_pool", ImplementationType::Vm);
 
         new_pair_changes.push(TransactionEntityChanges {
@@ -98,6 +94,31 @@ fn get_new_pairs(
 
     eh.on::<PairRegistered, _>(&mut on_pair_registered);
     eh.handle_events();
+}
+
+fn add_allowance_entrypoints(
+    builder: &mut TransactionChangesBuilder,
+    component: &ProtocolComponent,
+    config: &Config,
+) {
+    for token in &component.tokens {
+        let trace_data = entry_point_params::TraceData::Rpc(RpcTraceData {
+            caller: None,
+            calldata: erc20::functions::Allowance {
+                owner: config.swapper_address.clone(),
+                spender: config.trader_vault.clone(),
+            }
+            .encode(),
+        });
+        let (entrypoint, entrypoint_params) = create_entrypoint(
+            token.clone(),
+            ALLOWANCE_SIGNATURE.to_string(),
+            component.id.clone(),
+            trace_data,
+        );
+        builder.add_entrypoint(&entrypoint);
+        builder.add_entrypoint_params(&entrypoint_params);
+    }
 }
 
 #[substreams::handlers::store]
@@ -375,6 +396,7 @@ fn map_protocol_changes(
             .or_insert_with(|| TransactionChangesBuilder::new(&tycho_tx));
 
         for component in &tx_changes.component_changes {
+            add_allowance_entrypoints(builder, component, &config);
             builder.add_protocol_component(component);
         }
 
@@ -492,6 +514,8 @@ fn map_protocol_changes(
         &mut transaction_changes,
     );
 
+    let block_storage_changes = get_block_storage_changes(&block);
+
     Ok(BlockChanges {
         block: Some((&block).into()),
         changes: transaction_changes
@@ -499,6 +523,6 @@ fn map_protocol_changes(
             .sorted_unstable_by_key(|(index, _)| *index)
             .filter_map(|(_, builder)| builder.build())
             .collect::<Vec<_>>(),
-        storage_changes: vec![],
+        storage_changes: block_storage_changes,
     })
 }
