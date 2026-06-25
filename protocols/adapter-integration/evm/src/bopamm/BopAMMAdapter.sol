@@ -199,10 +199,13 @@ contract BopAMMAdapter is ISwapAdapter {
     {
         bytes32[] memory configured = new bytes32[](MAX_ASSET_ID);
         uint256 count = 0;
+        // Asset ids are assigned sequentially with no gaps and books are
+        // never delisted, so the first unconfigured id marks the end of the
+        // enumerable set. MAX_ASSET_ID stays as a safety cap on the loop.
         for (uint256 i = 0; i < MAX_ASSET_ID; i++) {
             (address asset,,,,) = pricing().getAssetConfig(uint8(i));
             if (asset == address(0)) {
-                continue;
+                break;
             }
             configured[count] = _poolId(uint8(i));
             count++;
