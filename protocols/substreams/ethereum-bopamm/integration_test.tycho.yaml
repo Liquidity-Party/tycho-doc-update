@@ -57,17 +57,18 @@ tests:
         skip_execution: true # No vm:bopamm executor registered; executed in Foundry (BopAMM.t.sol). See top.
 
   - name: test_book_simulation
-    # Spans book creation (25171616) through book 0's committed quotes, so the indexed snapshot
-    # carries the `override_block_timestamp` attribute that lets tycho-simulation pin
-    # block.timestamp and pass the registry's exact-timestamp gate. This validates the indexing ->
-    # simulation integration on substreams output — coverage the Foundry adapter tests cannot give
-    # (they read mainnet storage directly, never the indexed snapshot). Book 0 (WETH/USDC) is
-    # active/two-sided here and is simulated end to end (spot price, limits, amount out both
-    # directions). Book 1 (WBTC/USDC) first commits at 25252477 but is one-sided at this block
-    # (no USDC->WBTC liquidity), so spot-price setup can't price both directions; it shares book
-    # 0's code path and is left skip_simulation below.
+    # Spans book creation (25171616) through committed quotes for BOTH books, so the indexed
+    # snapshot carries each book's `override_block_timestamp`, which tycho-simulation pins per
+    # component to pass the registry's exact-timestamp gate. This validates the indexing ->
+    # simulation integration on substreams output — coverage the Foundry adapter tests cannot
+    # give (they read mainnet storage directly, never the indexed snapshot). Both books are
+    # two-sided as of their own last commit at this stop block and are simulated end to end
+    # (spot price, limits, amount out both directions). The two books commit at different
+    # blocks, so neither is fresh at the same block.timestamp — but the per-component timestamp
+    # override handles that. Book 1 (WBTC/USDC) is one-sided at its first commit (25252477) and
+    # only becomes two-sided at its 25266022 commit, hence this stop block.
     start_block: 25171610
-    stop_block: 25252490
+    stop_block: 25266022
     expected_components:
       - id: "0xdb13ad0fcd134e9c48f2fdaea8f6751a0f5349ca000000000000000000000000"
         tokens:
@@ -87,5 +88,8 @@ tests:
           asset_id: "0x0000000000000001"
           manual_updates: "0x01"
         creation_tx: "0x58071cb79cabce79033144d3a6b7433f61f917fc76f5b7755e6873b9cf4f8643"
-        skip_simulation: true # One-sided at this block (no USDC->WBTC liquidity) so spot-price setup can't price both directions. Same code path as book 0 (validated above). See the test comment.
+        # Book 1's first commit (25252477) is one-sided (USDC->WBTC reverts), but its
+        # 25266022 commit is two-sided, so at this stop block the VM state decodes and
+        # simulates both directions.
+        skip_simulation: false
         skip_execution: true # No vm:bopamm executor registered; executed in Foundry (BopAMM.t.sol). See top.
