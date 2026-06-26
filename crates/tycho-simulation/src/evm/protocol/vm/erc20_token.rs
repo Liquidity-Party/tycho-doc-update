@@ -65,17 +65,6 @@ impl TokenProxyOverwriteFactory {
             .insert(*IMPLEMENTATION_SLOT, U256::from_be_slice(implementation.as_slice()));
     }
 
-    /// Forces the proxy to behave as a self-contained token by zeroing the implementation slot.
-    ///
-    /// With a zero implementation the proxy never delegatecalls a backing contract: transfers to
-    /// recipients without a custom balance start them at zero instead. This is required for tokens
-    /// whose owning protocol does not emit token contract storage, so they are never accidentally
-    /// bound to a foreign implementation left in the shared DB by another protocol.
-    pub(crate) fn clear_implementation(&mut self) {
-        self.overwrites
-            .insert(*IMPLEMENTATION_SLOT, U256::ZERO);
-    }
-
     pub(crate) fn set_balance(&mut self, balance: U256, owner: Address) {
         // Set the balance in the custom storage slot
         let storage_index =
@@ -203,14 +192,6 @@ mod tests {
         let expected_value = U256::from_be_bytes(expected_bytes);
 
         assert_eq!(factory.overwrites[&*IMPLEMENTATION_SLOT], expected_value);
-    }
-
-    #[test]
-    fn test_token_proxy_clear_implementation() {
-        let mut factory = TokenProxyOverwriteFactory::new(Address::random(), None);
-        factory.clear_implementation();
-
-        assert_eq!(factory.overwrites[&*IMPLEMENTATION_SLOT], U256::ZERO);
     }
 
     #[test]

@@ -72,11 +72,6 @@ where
     adapter_contract: TychoSimulationContract<D>,
     /// Tokens for which balance overwrites should be disabled.
     disable_overwrite_tokens: HashSet<Address>,
-    /// Tokens whose owning protocol does not emit token contract storage, so they have no real
-    /// implementation backing in the shared DB. Their `TokenProxy` implementation slot is forced
-    /// to zero per simulation so they are never bound to a foreign implementation left in the
-    /// shared DB by another protocol. See [`TokenProxyOverwriteFactory::clear_implementation`].
-    self_contained_tokens: HashSet<Address>,
     /// Block context overrides applied to this pool's adapter simulations.
     block_overrides: Option<BlockEnvOverrides>,
 }
@@ -122,7 +117,6 @@ where
         manual_updates: bool,
         adapter_contract: TychoSimulationContract<D>,
         disable_overwrite_tokens: HashSet<Address>,
-        self_contained_tokens: HashSet<Address>,
         block_overrides: Option<BlockEnvOverrides>,
     ) -> Self {
         Self {
@@ -138,7 +132,6 @@ where
             manual_updates,
             adapter_contract,
             disable_overwrite_tokens,
-            self_contained_tokens,
             block_overrides,
         }
     }
@@ -469,26 +462,6 @@ where
         Ok(merged_overwrites)
     }
 
-    /// Builds a token proxy overwrite factory for `token`.
-    ///
-    /// For self-contained tokens (those whose protocol emits no token contract storage) the proxy
-    /// implementation slot is forced to zero, so the proxy is never bound to a foreign
-    /// implementation left in the shared DB by another protocol. Rebase/fee tokens listed in
-    /// `disable_overwrite_tokens` are excluded — they require their real implementation.
-    fn token_proxy_factory(&self, token: &Address) -> TokenProxyOverwriteFactory {
-        let mut overwrites = TokenProxyOverwriteFactory::new(*token, None);
-        if self
-            .self_contained_tokens
-            .contains(token) &&
-            !self
-                .disable_overwrite_tokens
-                .contains(token)
-        {
-            overwrites.clear_implementation();
-        }
-        overwrites
-    }
-
     fn get_token_overwrites(
         &self,
         tokens: Vec<Address>,
@@ -503,7 +476,7 @@ where
             res.push(self.get_balance_overwrites()?);
         }
 
-        let mut overwrites = self.token_proxy_factory(sell_token);
+        let mut overwrites = TokenProxyOverwriteFactory::new(*sell_token, None);
 
         overwrites.set_balance(max_amount, Address::from_slice(&*EXTERNAL_ACCOUNT.0));
 
@@ -546,7 +519,7 @@ where
             // Only override balances that are explicitly provided in self.balances
             // This preserves existing balances for tokens not updated in delta transitions
             for (token, bal) in &self.balances {
-                let mut overwrites = self.token_proxy_factory(token);
+                let mut overwrites = TokenProxyOverwriteFactory::new(*token, None);
                 overwrites.set_balance(*bal, address);
                 balance_overwrites.extend(overwrites.get_overwrites());
             }
@@ -556,7 +529,7 @@ where
         // for a contract we explicitly track balances for)
         for (contract, balances) in &self.contract_balances {
             for (token, balance) in balances {
-                let mut overwrites = self.token_proxy_factory(token);
+                let mut overwrites = TokenProxyOverwriteFactory::new(*token, None);
                 overwrites.set_balance(*balance, *contract);
                 balance_overwrites.extend(overwrites.get_overwrites());
             }
@@ -877,7 +850,6 @@ mod tests {
         engine_db::{create_engine, SHARED_TYCHO_DB},
         protocol::vm::{
             constants::{BALANCER_V2, ERC20_PROXY_BYTECODE},
-            erc20_token::IMPLEMENTATION_SLOT,
             state_builder::EVMPoolStateBuilder,
         },
         simulation::SimulationEngine,
@@ -1310,38 +1282,6 @@ mod tests {
 
         assert!(overwrites.contains_key(&dai_address));
         assert!(overwrites.contains_key(&bal_address));
-    }
-
-    #[tokio::test]
-    async fn test_self_contained_tokens_clear_implementation_slot_in_overwrites() {
-        let mut pool_state: EVMPoolState<PreCachedDB> = setup_pool_state().await;
-        let dai_address = dai_addr();
-        let bal_address = bal_addr();
-        pool_state.self_contained_tokens = HashSet::from([dai_address, bal_address]);
-
-        let overwrites = pool_state
-            .get_overwrites(vec![dai_address, bal_address], U256::from(1_000_000))
-            .unwrap();
-
-        assert_eq!(overwrites[&dai_address][&*IMPLEMENTATION_SLOT], U256::ZERO);
-        assert_eq!(overwrites[&bal_address][&*IMPLEMENTATION_SLOT], U256::ZERO);
-    }
-
-    #[tokio::test]
-    async fn test_disable_overwrite_tokens_do_not_clear_implementation_slot() {
-        let mut pool_state: EVMPoolState<PreCachedDB> = setup_pool_state().await;
-        let dai_address = dai_addr();
-        let bal_address = bal_addr();
-        pool_state.self_contained_tokens = HashSet::from([dai_address, bal_address]);
-        pool_state.disable_overwrite_tokens = HashSet::from([dai_address]);
-
-        let overwrites = pool_state
-            .get_overwrites(vec![dai_address, bal_address], U256::from(1_000_000))
-            .unwrap();
-
-        assert!(overwrites.contains_key(&dai_address));
-        assert!(!overwrites[&dai_address].contains_key(&*IMPLEMENTATION_SLOT));
-        assert_eq!(overwrites[&bal_address][&*IMPLEMENTATION_SLOT], U256::ZERO);
     }
 
     #[tokio::test]
