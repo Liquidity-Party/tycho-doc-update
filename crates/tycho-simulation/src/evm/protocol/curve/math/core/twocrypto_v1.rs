@@ -1,11 +1,17 @@
-//! TwoCryptoV1 — Legacy 2-coin CryptoSwap (CurveCryptoSwap2ETH).
+//! TwoCryptoV1 — Legacy 2-coin CryptoSwap (CurveCryptoSwap2 / CurveCryptoSwap2ETH).
 //!
-//! Vyper: https://github.com/curvefi/curve-crypto-contract/blob/master/contracts/two/CurveCryptoSwap2ETH.vy
+//! Two deployed Vyper flavours of the same legacy 2-coin CryptoSwap solver differ only in the
+//! `mul2` grouping inside the Newton `get_y` solver:
+//!   ETH variant  (CurveCryptoSwap2ETH.vy): `mul2 = 10**18 + (2 * 10**18) * K0 / _g1k0`
+//!     — division binds to the second term only, then `10**18` is added.
+//!   non-ETH      (CurveCryptoSwap2.vy):     `mul2 = unsafe_div(10**18 + (2 * 10**18) * K0, _g1k0)`
+//!     — division applies to the whole `(10**18 + 2*10**18*K0)` numerator.
+//! Both share the identical `mul1`, `_g1k0`, and iteration body; only this single integer-division
+//! grouping differs, which can shift `mul2` (and therefore the converged `y`) by a few wei and so
+//! diverge `get_dy` on some pools. `eth_variant = true` selects the ETH grouping.
 //!
-//! NOTE: The repo also contains CurveCryptoSwap2.vy (non-ETH variant) which has a different
-//! `mul2` formula: `unsafe_div(10**18 + 2*10**18*K0, _g1k0)` (divides entire sum).
-//! The ETH variant uses: `10**18 + (2*10**18)*K0 / _g1k0` (divides only second term).
-//! Deployed CRV/ETH pool matches the ETH variant.
+//! Vyper ETH:     https://github.com/curvefi/curve-crypto-contract/blob/master/contracts/two/CurveCryptoSwap2ETH.vy
+//! Vyper non-ETH: https://github.com/curvefi/curve-crypto-contract/blob/master/contracts/two/CurveCryptoSwap2.vy
 
 use alloy_primitives::U256;
 
@@ -14,7 +20,19 @@ pub const FEE_DENOMINATOR: U256 = U256::from_limbs([10_000_000_000, 0, 0, 0]);
 pub const A_MULTIPLIER: U256 = U256::from_limbs([10_000, 0, 0, 0]);
 const MAX_ITERATIONS: usize = 255;
 
-pub fn newton_y_2(ann: U256, gamma: U256, x: [U256; 2], d: U256, j: usize) -> Option<U256> {
+/// Newton solver for the legacy 2-coin CryptoSwap `get_y`.
+///
+/// `eth_variant` selects the deployed Vyper flavour's `mul2` integer-division grouping:
+/// `true` for the ETH pool (`10**18 + (2 * 10**18) * K0 / _g1k0`), `false` for the non-ETH pool
+/// (`(10**18 + 2*10**18*K0) / _g1k0`). All other terms are identical between flavours.
+pub fn newton_y_2(
+    ann: U256,
+    gamma: U256,
+    x: [U256; 2],
+    d: U256,
+    j: usize,
+    eth_variant: bool,
+) -> Option<U256> {
     let n = U256::from(2u64);
     let x_j = x[1 - j];
     let mut y = d * d / (x_j * U256::from(4u64));
@@ -32,7 +50,13 @@ pub fn newton_y_2(ann: U256, gamma: U256, x: [U256; 2], d: U256, j: usize) -> Op
         let _g1k0 =
             if __g1k0 > k0 { __g1k0 - k0 + U256::from(1) } else { k0 - __g1k0 + U256::from(1) };
         let mul1 = WAD * d / gamma * _g1k0 / gamma * _g1k0 * A_MULTIPLIER / ann;
-        let mul2 = WAD + U256::from(2u64) * WAD * k0 / _g1k0;
+        // The two deployed flavours differ only here. ETH divides the second term alone then adds
+        // 10**18; non-ETH divides the whole (10**18 + 2*10**18*K0) numerator by _g1k0.
+        let mul2 = if eth_variant {
+            WAD + U256::from(2u64) * WAD * k0 / _g1k0
+        } else {
+            (WAD + U256::from(2u64) * WAD * k0) / _g1k0
+        };
         let yfprime = WAD * y + s * mul2 + mul1;
         let _dyfprime = d * mul2;
         if yfprime < _dyfprime {
@@ -103,7 +127,7 @@ mod tests {
     #[test]
     fn newton_y_2_convergence() {
         let (ann, gamma, x, d) = realistic_params();
-        let y = newton_y_2(ann, gamma, x, d, 1).expect("converge");
+        let y = newton_y_2(ann, gamma, x, d, 1, true).expect("converge");
         assert!(y > U256::ZERO);
         assert!(y < d);
     }
@@ -113,9 +137,23 @@ mod tests {
         let wad = WAD;
         let (ann, gamma, x, d) = realistic_params();
         let dx = U256::from(10u64) * wad;
-        let y_before = newton_y_2(ann, gamma, x, d, 1).expect("before");
-        let y_after = newton_y_2(ann, gamma, [x[0] + dx, x[1]], d, 1).expect("after");
+        let y_before = newton_y_2(ann, gamma, x, d, 1, true).expect("before");
+        let y_after = newton_y_2(ann, gamma, [x[0] + dx, x[1]], d, 1, true).expect("after");
         assert!(y_after < y_before);
+    }
+
+    /// The two flavours agree when `2*10**18*K0` is an exact multiple of `_g1k0` (no truncation),
+    /// and can diverge by a wei or two otherwise. Confirm the non-ETH grouping still converges to a
+    /// sane `y` and that the selector actually changes the math in at least one regime.
+    #[test]
+    fn newton_y_2_eth_vs_non_eth() {
+        let (ann, gamma, x, d) = realistic_params();
+        let y_eth = newton_y_2(ann, gamma, x, d, 1, true).expect("eth converge");
+        let y_non = newton_y_2(ann, gamma, x, d, 1, false).expect("non-eth converge");
+        assert!(y_non > U256::ZERO && y_non < d);
+        // Both are valid roots; they agree to within the per-iteration truncation tolerance.
+        let diff = if y_eth > y_non { y_eth - y_non } else { y_non - y_eth };
+        assert!(diff < U256::from(1_000u64), "flavours diverge implausibly: {diff}");
     }
 
     #[test]

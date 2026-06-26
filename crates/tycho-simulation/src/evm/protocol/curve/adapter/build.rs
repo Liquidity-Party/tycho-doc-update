@@ -232,6 +232,19 @@ pub struct RawPoolState {
     ///
     /// If `None`, precisions are computed as `10^(18 - decimals)`.
     pub precisions: Option<Vec<U256>>,
+
+    /// Selects the deployed Vyper flavour for **TwoCryptoV1 only**. **Immutable.**
+    ///
+    /// Legacy 2-coin CryptoSwap V1 pools ship in two flavours whose Newton `get_y` solver differs
+    /// by a single `mul2` integer-division grouping (see
+    /// [`crate::evm::protocol::curve::math::core::twocrypto_v1`]). `Some(true)` selects the ETH
+    /// pool grouping (all factory/proxy and WETH-paired legacy pools); `Some(false)` selects the
+    /// non-ETH legacy direct-deploy grouping.
+    ///
+    /// Required for `TwoCryptoV1` — [`build_pool`] returns [`BuildError::MissingField`] if it is
+    /// `None`. Ignored for every other variant. Obtain it via
+    /// [`detect_eth_variant`](crate::evm::protocol::curve::adapter::detect_eth_variant).
+    pub eth_variant: Option<bool>,
 }
 
 impl Default for RawPoolState {
@@ -251,6 +264,7 @@ impl Default for RawPoolState {
             gamma: None,
             dynamic_rates: None,
             precisions: None,
+            eth_variant: None,
         }
     }
 }
@@ -387,6 +401,7 @@ pub fn build_pool(state: &RawPoolState) -> Result<Pool, BuildError> {
         CurveVariant::StableSwapV0 |
         CurveVariant::StableSwapV1 |
         CurveVariant::StableSwapV2 |
+        CurveVariant::StableSwapSTETH |
         CurveVariant::StableSwapMeta => build_stableswap_plain(state),
         CurveVariant::StableSwapNG => build_stableswap_ng(state),
         CurveVariant::StableSwapALend => build_stableswap_alend(state),
@@ -431,6 +446,7 @@ fn build_stableswap_plain(state: &RawPoolState) -> Result<Pool, BuildError> {
         CurveVariant::StableSwapV0 => Pool::StableSwapV0 { balances, rates, amp, fee },
         CurveVariant::StableSwapV1 => Pool::StableSwapV1 { balances, rates, amp, fee },
         CurveVariant::StableSwapV2 => Pool::StableSwapV2 { balances, rates, amp, fee },
+        CurveVariant::StableSwapSTETH => Pool::StableSwapSTETH { balances, rates, amp, fee },
         CurveVariant::StableSwapMeta => Pool::StableSwapMeta { balances, rates, amp, fee },
         _ => unreachable!(),
     })
@@ -525,6 +541,9 @@ fn build_twocrypto(state: &RawPoolState) -> Result<Pool, BuildError> {
     match state.variant {
         CurveVariant::TwoCryptoV1 => {
             let gamma = require!(state, gamma);
+            // TwoCryptoV1 has two deployed Vyper flavours; the consumer must say which one via
+            // `eth_variant` (typically from `detect_eth_variant`). Other variants ignore it.
+            let eth_variant = require!(state, eth_variant);
             Ok(Pool::TwoCryptoV1 {
                 balances,
                 precisions: prec_arr,
@@ -535,6 +554,7 @@ fn build_twocrypto(state: &RawPoolState) -> Result<Pool, BuildError> {
                 mid_fee,
                 out_fee,
                 fee_gamma,
+                eth_variant,
             })
         }
         CurveVariant::TwoCryptoNG => {
@@ -1209,6 +1229,8 @@ mod tests {
                 } else {
                     vec![U256::from(10u64).pow(U256::from(18u64)); n - 1]
                 }),
+                // Required for TwoCryptoV1; ignored by every other crypto variant.
+                eth_variant: Some(true),
                 ..Default::default()
             }
         };
@@ -1384,6 +1406,7 @@ mod tests {
             mid_fee: Some(U256::from(26_000_000u64)),
             out_fee: Some(U256::from(45_000_000u64)),
             fee_gamma: Some(u("230000000000000")),
+            eth_variant: Some(true), // CRV/ETH is WETH-paired → ETH solver
             ..Default::default()
         };
         let pool = build_pool(&state).unwrap();

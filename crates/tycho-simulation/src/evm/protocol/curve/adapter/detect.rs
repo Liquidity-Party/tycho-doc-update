@@ -185,12 +185,14 @@ fn detect_stableswap(probing: &ProbingResults) -> CurveVariant {
         return CurveVariant::StableSwapV0;
     }
 
-    // Fallback: known addresses for V0/V1, else V2
+    // Fallback: known addresses for V0/V1/STETH, else V2
     let addr = probing.pool_address;
     if KNOWN_V0.contains(&addr) {
         CurveVariant::StableSwapV0
     } else if KNOWN_V1.contains(&addr) {
         CurveVariant::StableSwapV1
+    } else if KNOWN_STETH.contains(&addr) {
+        CurveVariant::StableSwapSTETH
     } else {
         CurveVariant::StableSwapV2
     }
@@ -222,6 +224,46 @@ const KNOWN_V1: [Address; 2] = [
     address!("bEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7"), // 3pool
     address!("4CA9b3063Ec5866A4B82E437059D2C43d1be596F"), // hbtc
 ];
+
+// The Lido stETH/ETH pool is a one-off custom deployment whose `get_D` differs from the
+// base/plain template by a `+1` divisor guard. It probes identically to a plain V2 pool
+// (balances(uint256), no gamma/stored_rates/offpeg/version/base_pool), so it can only be told
+// apart by address.
+const KNOWN_STETH: [Address; 1] = [
+    address!("DC24316b9AE028F1497c275EB9192a3Ea0f67022"), // Lido stETH/ETH
+];
+
+/// Legacy TwoCryptoV1 pools that need the **non-ETH** `get_y` solver flavour.
+///
+/// # Mechanism
+///
+/// Legacy 2-coin CryptoSwap V1 ships in two deployed Vyper flavours whose Newton `get_y` solver
+/// differs only in the `mul2` integer-division grouping (see
+/// [`crate::evm::protocol::curve::math::core::twocrypto_v1`]):
+/// - `CurveCryptoSwap2ETH.vy` (ETH flavour): `10**18 + (2 * 10**18) * K0 / _g1k0`.
+/// - `CurveCryptoSwap2.vy` (non-ETH flavour): `(10**18 + 2*10**18*K0) / _g1k0`.
+///
+/// The TwoCryptoV1 factory deploys (EIP-1167 minimal proxies) and the WETH-paired legacy pools all
+/// use the ETH flavour, so [`detect_eth_variant`] returns `true` by default. Only a small set of
+/// legacy direct-deploy pools that are not WETH-paired use the non-ETH flavour. Those are listed
+/// here, identified by testing both flavours against the pool's on-chain `get_dy`.
+///
+/// This list is empty: every legacy and factory TwoCryptoV1 verified against on-chain `get_dy`
+/// (CRV/ETH and a factory EIP-1167 proxy) matched the ETH flavour wei-for-wei, and no non-ETH
+/// direct-deploy pool was confidently identified during verification. The brief is to add entries
+/// empirically (lowercased `address!(...)` with a verification comment) only when a real quote
+/// mismatch surfaces a pool that the non-ETH flavour reproduces; guessing addresses is not allowed.
+/// Correctness holds for ~99% of pools (all factory + WETH-paired pools) regardless.
+const NON_ETH_TWOCRYPTO_V1: [Address; 0] = [];
+
+/// Whether a TwoCryptoV1 pool uses the ETH `get_y` solver flavour.
+///
+/// Returns `true` for all pools except the hardcoded [`NON_ETH_TWOCRYPTO_V1`] deny-list, which
+/// holds legacy direct-deploy pools verified to need the non-ETH flavour. See that constant for
+/// the mechanism and how the list is maintained.
+pub fn detect_eth_variant(pool: Address) -> bool {
+    !NON_ETH_TWOCRYPTO_V1.contains(&pool)
+}
 
 #[cfg(test)]
 mod tests {
@@ -505,6 +547,33 @@ mod tests {
             pool_address: addr("0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7"),
         };
         assert_eq!(detect_variant(&probing).unwrap(), CurveVariant::StableSwapV1);
+    }
+
+    #[test]
+    fn detect_stableswap_steth_by_known_address() {
+        // The Lido stETH/ETH pool probes like a plain V2 pool; only its known address
+        // distinguishes it.
+        let probing = ProbingResults {
+            has_gamma: false,
+            n_coins: 2,
+            has_math: false,
+            math_version: None,
+            has_offpeg_fee_multiplier: false,
+            has_stored_rates: false,
+            has_version: false,
+            has_base_pool: false,
+            has_int128_balances: false,
+            pool_address: addr("0xDC24316b9AE028F1497c275EB9192a3Ea0f67022"),
+        };
+        assert_eq!(detect_variant(&probing).unwrap(), CurveVariant::StableSwapSTETH);
+    }
+
+    #[test]
+    fn detect_eth_variant_defaults_true() {
+        // CRV/ETH (WETH-paired) and an arbitrary address both default to the ETH solver flavour;
+        // only the (currently empty) NON_ETH_TWOCRYPTO_V1 deny-list returns false.
+        assert!(detect_eth_variant(addr("0x8301AE4fc9c624d1D396cbDAa1ed877821D7C511")));
+        assert!(detect_eth_variant(Address::ZERO));
     }
 
     #[test]

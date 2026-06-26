@@ -81,6 +81,11 @@ pub enum Pool {
     /// A_PRECISION=100, -1 offset, fee before denormalize.
     StableSwapV2 { balances: Vec<U256>, rates: Vec<U256>, amp: U256, fee: U256 },
 
+    /// Lido stETH/ETH custom StableSwap (0xDC24316b9AE028F1497c275EB9192a3Ea0f67022).
+    /// A_PRECISION=100, -1 offset, fee before denormalize. Same shape as `StableSwapV2`, but
+    /// `get_d` uses a `+1` divisor guard (see `core::stableswap_steth`).
+    StableSwapSTETH { balances: Vec<U256>, rates: Vec<U256>, amp: U256, fee: U256 },
+
     /// Aave-style lending StableSwap (Aave, sAAVE, IB, aETH).
     /// A_PRECISION=100, no -1 offset, dynamic fee, uses precision_mul.
     StableSwapALend {
@@ -107,7 +112,8 @@ pub enum Pool {
     StableSwapMeta { balances: Vec<U256>, rates: Vec<U256>, amp: U256, fee: U256 },
 
     /// Legacy 2-coin CryptoSwap (CurveCryptoSwap2).
-    /// Newton iteration for y.
+    /// Newton iteration for y. `eth_variant` selects the deployed Vyper flavour's `mul2`
+    /// grouping in the Newton solver (ETH pool vs non-ETH legacy direct deploy).
     TwoCryptoV1 {
         balances: [U256; 2],
         precisions: [U256; 2],
@@ -118,6 +124,7 @@ pub enum Pool {
         mid_fee: U256,
         out_fee: U256,
         fee_gamma: U256,
+        eth_variant: bool,
     },
 
     /// Next-gen 2-coin CryptoSwap (twocrypto-ng).
@@ -184,6 +191,7 @@ impl Pool {
             Pool::StableSwapV0 { balances, .. } |
             Pool::StableSwapV1 { balances, .. } |
             Pool::StableSwapV2 { balances, .. } |
+            Pool::StableSwapSTETH { balances, .. } |
             Pool::StableSwapALend { balances, .. } |
             Pool::StableSwapNG { balances, .. } |
             Pool::StableSwapMeta { balances, .. } => balances,
@@ -213,6 +221,9 @@ impl Pool {
             }
             Pool::StableSwapV2 { balances, rates, amp, fee } => {
                 swap::stableswap_v2::get_amount_out(balances, rates, *amp, *fee, i, j, dx)
+            }
+            Pool::StableSwapSTETH { balances, rates, amp, fee } => {
+                swap::stableswap_steth::get_amount_out(balances, rates, *amp, *fee, i, j, dx)
             }
             Pool::StableSwapALend { balances, precision_mul, amp, fee, offpeg_fee_multiplier } => {
                 swap::stableswap_alend::get_amount_out(
@@ -251,6 +262,7 @@ impl Pool {
                 mid_fee,
                 out_fee,
                 fee_gamma,
+                eth_variant,
             } => swap::twocrypto_v1::get_amount_out(
                 balances,
                 precisions,
@@ -261,6 +273,7 @@ impl Pool {
                 *mid_fee,
                 *out_fee,
                 *fee_gamma,
+                *eth_variant,
                 i,
                 j,
                 dx,
@@ -395,6 +408,17 @@ impl Pool {
                 j,
                 desired_output,
             ),
+            Pool::StableSwapSTETH { balances, rates, amp, fee } => {
+                swap::stableswap_steth::get_amount_in(
+                    balances,
+                    rates,
+                    *amp,
+                    *fee,
+                    i,
+                    j,
+                    desired_output,
+                )
+            }
             Pool::StableSwapALend { balances, precision_mul, amp, fee, offpeg_fee_multiplier } => {
                 swap::stableswap_alend::get_amount_in(
                     balances,
@@ -440,6 +464,7 @@ impl Pool {
                 mid_fee,
                 out_fee,
                 fee_gamma,
+                eth_variant,
             } => swap::twocrypto_v1::get_amount_in(
                 balances,
                 precisions,
@@ -450,6 +475,7 @@ impl Pool {
                 *mid_fee,
                 *out_fee,
                 *fee_gamma,
+                *eth_variant,
                 i,
                 j,
                 desired_output,
@@ -566,6 +592,9 @@ impl Pool {
             Pool::StableSwapV2 { balances, rates, amp, fee } => {
                 swap::stableswap_v2::spot_price(balances, rates, *amp, *fee, i, j)
             }
+            Pool::StableSwapSTETH { balances, rates, amp, fee } => {
+                swap::stableswap_steth::spot_price(balances, rates, *amp, *fee, i, j)
+            }
             Pool::StableSwapALend { balances, precision_mul, amp, fee, offpeg_fee_multiplier } => {
                 swap::stableswap_alend::spot_price(
                     balances,
@@ -601,6 +630,7 @@ impl Pool {
                 mid_fee,
                 out_fee,
                 fee_gamma,
+                eth_variant,
             } => swap::twocrypto_v1::spot_price(
                 balances,
                 precisions,
@@ -611,6 +641,7 @@ impl Pool {
                 *mid_fee,
                 *out_fee,
                 *fee_gamma,
+                *eth_variant,
                 i,
                 j,
             ),
@@ -713,6 +744,7 @@ impl Pool {
             Pool::StableSwapV0 { amp, .. } |
             Pool::StableSwapV1 { amp, .. } |
             Pool::StableSwapV2 { amp, .. } |
+            Pool::StableSwapSTETH { amp, .. } |
             Pool::StableSwapALend { amp, .. } |
             Pool::StableSwapNG { amp, .. } |
             Pool::StableSwapMeta { amp, .. } => *amp,
@@ -729,6 +761,7 @@ impl Pool {
             Pool::StableSwapV0 { fee, .. } |
             Pool::StableSwapV1 { fee, .. } |
             Pool::StableSwapV2 { fee, .. } |
+            Pool::StableSwapSTETH { fee, .. } |
             Pool::StableSwapALend { fee, .. } |
             Pool::StableSwapNG { fee, .. } |
             Pool::StableSwapMeta { fee, .. } => Some(*fee),
@@ -757,6 +790,7 @@ impl Pool {
             Pool::StableSwapV0 { rates, .. } |
             Pool::StableSwapV1 { rates, .. } |
             Pool::StableSwapV2 { rates, .. } |
+            Pool::StableSwapSTETH { rates, .. } |
             Pool::StableSwapNG { rates, .. } |
             Pool::StableSwapMeta { rates, .. } => Some(rates),
             _ => None,
@@ -832,6 +866,7 @@ impl Pool {
             Pool::StableSwapV0 { balances, .. } |
             Pool::StableSwapV1 { balances, .. } |
             Pool::StableSwapV2 { balances, .. } |
+            Pool::StableSwapSTETH { balances, .. } |
             Pool::StableSwapALend { balances, .. } |
             Pool::StableSwapNG { balances, .. } |
             Pool::StableSwapMeta { balances, .. } => balances.get_mut(index),
@@ -854,6 +889,7 @@ impl Pool {
             Pool::StableSwapV0 { rates, .. } |
             Pool::StableSwapV1 { rates, .. } |
             Pool::StableSwapV2 { rates, .. } |
+            Pool::StableSwapSTETH { rates, .. } |
             Pool::StableSwapNG { rates, .. } |
             Pool::StableSwapMeta { rates, .. } => {
                 *rates
@@ -912,6 +948,7 @@ impl Pool {
             Pool::StableSwapV0 { amp, .. } |
             Pool::StableSwapV1 { amp, .. } |
             Pool::StableSwapV2 { amp, .. } |
+            Pool::StableSwapSTETH { amp, .. } |
             Pool::StableSwapALend { amp, .. } |
             Pool::StableSwapNG { amp, .. } |
             Pool::StableSwapMeta { amp, .. } => *amp = value,

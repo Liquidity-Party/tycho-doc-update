@@ -160,6 +160,40 @@ mod tests {
     use super::*;
     use crate::evm::protocol::curve::math::core::stableswap_alend::A_PRECISION;
 
+    /// Wei-exact differential vs on-chain `get_dy` for the Aave 3pool
+    /// (0xDeBF20617708857ebe4F679508E7b7863a8A8EeE, aDAI/aUSDC/aUSDT) at block 25401200.
+    /// amp = 200000 (A=2000, A_PRECISION=100), fee = 4_000_000, offpeg = 20_000_000_000.
+    /// Covers both directions, all three coin pairs, and extreme imbalance / tiny inputs — the
+    /// regimes where a wrong `get_D` truncation would surface a 1-wei drift. The vendored
+    /// `get_d`/`get_y` already reproduce the deployed pool exactly across all of them.
+    #[test]
+    fn alend_matches_onchain_get_dy() {
+        let u = |s: &str| s.parse::<U256>().unwrap();
+        let balances = [u("125488430156053722648910"), u("131122800549"), u("53488270065")];
+        let prec_mul =
+            [U256::from(1u64), U256::from(1_000_000_000_000u64), U256::from(1_000_000_000_000u64)];
+        let amp = U256::from(200_000u64);
+        let fee = U256::from(4_000_000u64);
+        let offpeg = U256::from(20_000_000_000u64);
+
+        let cases: [(usize, usize, U256, U256); 9] = [
+            (0, 1, u("1000000000000000000000"), u("999618177")),
+            (0, 1, u("100000000000000000000000"), u("99870369220")),
+            (1, 0, u("1000000000"), u("999573734583087958839")),
+            (1, 0, u("50000000000"), u("49966345078937510184432")),
+            (1, 2, u("1000000000"), u("998826063")),
+            (2, 0, u("1000000000"), u("1000243932024580195436")),
+            (1, 0, u("1"), u("999577719574")),
+            (0, 1, u("120000000000000000000000"), u("119631720501")),
+            (2, 0, u("49000000000"), u("48989548842225763894451")),
+        ];
+        for (i, j, dx, expected) in cases {
+            let got = get_amount_out(&balances, &prec_mul, amp, fee, offpeg, i, j, dx)
+                .expect("alend get_amount_out");
+            assert_eq!(got, expected, "alend {i}->{j} dx={dx}");
+        }
+    }
+
     #[test]
     fn roundtrip() {
         // All 18-dec tokens (precision_mul = 1)

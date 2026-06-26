@@ -10,9 +10,12 @@ pub enum CurveVariant {
     /// 3pool era (2021): 3pool, hBTC.
     /// A_PRECISION=1, `-1` offset on dy.
     StableSwapV1,
-    /// Base/plain template: factory plain pools, stETH, FRAX/USDC.
+    /// Base/plain template: factory plain pools, FRAX/USDC.
     /// A_PRECISION=100, `-1` offset, fee before denormalize.
     StableSwapV2,
+    /// Lido stETH/ETH custom pool (0xDC24316b9AE028F1497c275EB9192a3Ea0f67022).
+    /// Same shape as `StableSwapV2`, but `get_D` adds a `+1` divisor guard.
+    StableSwapSTETH,
     /// Aave lending template: aave, sAAVE, IB pools.
     /// A_PRECISION=100, dynamic fee via `offpeg_fee_multiplier`.
     StableSwapALend,
@@ -46,6 +49,7 @@ impl CurveVariant {
             Self::StableSwapV0 => "StableSwapV0",
             Self::StableSwapV1 => "StableSwapV1",
             Self::StableSwapV2 => "StableSwapV2",
+            Self::StableSwapSTETH => "StableSwapSTETH",
             Self::StableSwapALend => "StableSwapALend",
             Self::StableSwapNG => "StableSwapNG",
             Self::StableSwapMeta => "StableSwapMeta",
@@ -72,6 +76,7 @@ impl std::str::FromStr for CurveVariant {
             "StableSwapV0" => Ok(Self::StableSwapV0),
             "StableSwapV1" => Ok(Self::StableSwapV1),
             "StableSwapV2" => Ok(Self::StableSwapV2),
+            "StableSwapSTETH" => Ok(Self::StableSwapSTETH),
             "StableSwapALend" => Ok(Self::StableSwapALend),
             "StableSwapNG" => Ok(Self::StableSwapNG),
             "StableSwapMeta" => Ok(Self::StableSwapMeta),
@@ -95,6 +100,7 @@ mod tests {
             CurveVariant::StableSwapV0,
             CurveVariant::StableSwapV1,
             CurveVariant::StableSwapV2,
+            CurveVariant::StableSwapSTETH,
             CurveVariant::StableSwapALend,
             CurveVariant::StableSwapNG,
             CurveVariant::StableSwapMeta,

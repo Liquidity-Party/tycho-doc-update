@@ -16,6 +16,7 @@ pub fn get_amount_out(
     mid_fee: U256,
     out_fee: U256,
     fee_gamma: U256,
+    eth_variant: bool,
     i: usize,
     j: usize,
     dx: U256,
@@ -36,7 +37,7 @@ pub fn get_amount_out(
     let xp: [U256; 2] = [bal[0] * precisions[0], bal[1] * price_scale_local / wad];
 
     // Vyper: y = newton_y(A, gamma, xp, D, j)
-    let y = newton_y_2(ann, gamma, xp, d, j)?;
+    let y = newton_y_2(ann, gamma, xp, d, j, eth_variant)?;
 
     if xp[j] <= y {
         return None;
@@ -73,6 +74,7 @@ pub fn get_amount_in(
     mid_fee: U256,
     out_fee: U256,
     fee_gamma: U256,
+    eth_variant: bool,
     i: usize,
     j: usize,
     desired_output: U256,
@@ -107,7 +109,7 @@ pub fn get_amount_in(
     // Solve for x_new at index i
     let mut xp_mod = xp_orig;
     xp_mod[j] = y;
-    let x_new = newton_y_2(ann, gamma, xp_mod, d, i)?;
+    let x_new = newton_y_2(ann, gamma, xp_mod, d, i, eth_variant)?;
 
     // Second pass: recompute fee with actual xp_after
     let mut xp_after = [U256::ZERO; 2];
@@ -128,7 +130,7 @@ pub fn get_amount_in(
     let y = xp_orig[j] - dy_internal;
     let mut xp_mod = xp_orig;
     xp_mod[j] = y;
-    let x_new = newton_y_2(ann, gamma, xp_mod, d, i)?;
+    let x_new = newton_y_2(ann, gamma, xp_mod, d, i, eth_variant)?;
 
     if x_new <= xp_orig[i] {
         return None;
@@ -151,6 +153,7 @@ pub fn get_amount_in(
             mid_fee,
             out_fee,
             fee_gamma,
+            eth_variant,
             i,
             j,
             amt,
@@ -199,6 +202,7 @@ pub fn spot_price(
     mid_fee: U256,
     out_fee: U256,
     fee_gamma: U256,
+    eth_variant: bool,
     i: usize,
     j: usize,
 ) -> Option<(U256, U256)> {
@@ -213,6 +217,7 @@ pub fn spot_price(
         mid_fee,
         out_fee,
         fee_gamma,
+        eth_variant,
         i,
         j,
         dx,
@@ -248,6 +253,7 @@ mod tests {
             mid_fee,
             out_fee,
             fee_gamma,
+            true,
             0,
             1,
             dx,
@@ -263,6 +269,7 @@ mod tests {
             mid_fee,
             out_fee,
             fee_gamma,
+            true,
             0,
             1,
             dy,
@@ -279,6 +286,7 @@ mod tests {
             mid_fee,
             out_fee,
             fee_gamma,
+            true,
             0,
             1,
             dx_recovered,
@@ -310,6 +318,7 @@ mod tests {
             mid_fee,
             out_fee,
             fee_gamma,
+            true,
             0,
             1,
             dx,
@@ -325,6 +334,7 @@ mod tests {
             mid_fee,
             out_fee,
             fee_gamma,
+            true,
             0,
             1,
         )
@@ -358,6 +368,7 @@ mod tests {
             mid_fee,
             out_fee,
             fee_gamma,
+            true,
             0,
             1,
         )

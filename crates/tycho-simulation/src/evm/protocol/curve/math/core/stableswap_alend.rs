@@ -1,10 +1,16 @@
 //! StableSwapALend — Aave-style lending pools (Aave, sAAVE, IB, aETH).
 //!
 //! a_precision=100, no -1 offset, fee after denormalize, dynamic fee with avg xp.
-//! Vyper: https://github.com/curvefi/curve-contract/blob/master/contracts/pool-templates/a/SwapTemplateA.vy
+//! Deployed Vyper (the actual on-chain pools, not the later generic template):
+//! https://github.com/curvefi/curve-contract/blob/master/contracts/pools/aave/StableSwapAave.vy
+//! https://github.com/curvefi/curve-contract/blob/master/contracts/pools/saave/StableSwapSAAVE.vy
 //!
 //! IMPORTANT: Uses PRECISION_MUL directly (not stored_rates/PRECISION).
 //! Normalization: xp[k] = balance[k] * precision_mul[k]
+//!
+//! `get_d` uses the `+1` divisor guard (`_x * N_COINS + 1`) present in the deployed Aave/sAAVE
+//! pools. The generic `pool-templates/a/SwapTemplateA.vy` later dropped that `+1`; the deployed
+//! pools kept it, so it is required for wei-exactness in low-A / near-zero-balance regimes.
 
 use alloy_primitives::U256;
 
@@ -24,10 +30,15 @@ pub fn get_d(xp: &[U256], amp: U256) -> Option<U256> {
     let mut d = sum;
     for _ in 0..MAX_ITERATIONS {
         let mut d_p = d;
+        // Deployed Aave/sAAVE get_D: D_P = D_P * D / (_x * N_COINS + 1). The trailing `+1` is the
+        // on-chain "+1 is to prevent /0" guard; it only changes the result when a normalized
+        // balance is near zero, but is required to match the deployed pools exactly.
         for balance in xp {
-            d_p = d_p
-                .checked_mul(d)?
-                .checked_div(balance.checked_mul(n)?)?;
+            d_p = d_p.checked_mul(d)?.checked_div(
+                balance
+                    .checked_mul(n)?
+                    .checked_add(U256::from(1))?,
+            )?;
         }
         let d_prev = d;
         let num = ann
@@ -138,6 +149,17 @@ mod tests {
         let y = get_y(0, 1, xp[0], &xp, d, amp).expect("y");
         let diff = if y > xp[1] { y - xp[1] } else { xp[1] - y };
         assert!(diff <= U256::from(1));
+    }
+
+    /// Pins the deployed Aave/sAAVE `get_D` `+1` divisor guard. In a near-zero-balance regime the
+    /// guard changes the converged D: with `amp = 100 * A_PRECISION` it gives `D = 650`, whereas
+    /// dropping the `+1` (the generic `SwapTemplateA.vy` form) gives `D = 602`. The deployed pools
+    /// use `+1`. Reference computed from the deployed Vyper integer math.
+    #[test]
+    fn get_d_plus_one_guard_near_zero_balance() {
+        let xp = [U256::from(900u64), U256::from(1u64)];
+        let amp = U256::from(100u64) * A_PRECISION;
+        assert_eq!(get_d(&xp, amp), Some(U256::from(650u64)));
     }
 
     #[test]

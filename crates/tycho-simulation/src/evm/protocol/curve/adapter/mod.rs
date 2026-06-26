@@ -45,5 +45,5 @@ mod variant;
 mod build;
 
 pub use build::{build_pool, interpolate_a, BuildError, RawPoolState};
-pub use detect::{detect_variant, DetectError, ProbingResults};
+pub use detect::{detect_eth_variant, detect_variant, DetectError, ProbingResults};
 pub use variant::CurveVariant;
