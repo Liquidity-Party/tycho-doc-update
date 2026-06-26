@@ -1,5 +1,5 @@
 pub mod blockchain;
-mod chain_config;
+pub mod chain_config;
 pub mod contract;
 pub mod error;
 pub mod protocol;
@@ -8,7 +8,7 @@ pub mod token;
 use std::{collections::HashMap, fmt::Display, str::FromStr};
 
 pub use blockchain::{BlockChanges, TxWithContractChanges};
-pub use chain_config::*;
+use chain_config::{CustomChainConfig, TvlThresholdTier};
 use deepsize::DeepSizeOf;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -483,7 +483,10 @@ pub enum MergeError {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{
+        chain_config::{ChainAddress, ChainAddressError, ChainTokenConfig, TvlThresholds},
+        *,
+    };
 
     fn test_config() -> CustomChainConfig {
         CustomChainConfig::try_new(
