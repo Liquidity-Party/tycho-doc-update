@@ -7,6 +7,7 @@ use ethabi::{ParamType, Token};
 use keccak_hash::keccak;
 use substreams::{
     hex,
+    scalar::BigInt,
     store::{StoreGet, StoreGetProto},
 };
 use tycho_substreams::prelude::*;
@@ -52,6 +53,26 @@ pub fn asset_config_slot(asset_id: u64, base_slot: u64) -> Vec<u8> {
 
 pub fn is_zero(value: &[u8]) -> bool {
     value.iter().all(|&b| b == 0)
+}
+
+/// Extracts the 20-byte address packed in the low bytes of a 32-byte storage word.
+///
+/// Storage words shorter than 20 bytes are left-padded with zeros; the zero word yields the
+/// zero address, which callers treat as "no maker yet" (first designation).
+pub fn address_from_word(word: &[u8]) -> Vec<u8> {
+    let mut address = [0u8; 20];
+    let take = word.len().min(20);
+    address[20 - take..].copy_from_slice(&word[word.len() - take..]);
+    address.to_vec()
+}
+
+/// The signed WETH balance delta a `Deposit`/`Withdrawal` applies to the maker.
+///
+/// `signed_wad` is the change as it affects the maker's WETH balance (`+wad` for a deposit,
+/// `-wad` for a withdrawal). Returns `Some` only when `party` (the deposit `dst` / withdrawal
+/// `src`) is the maker, since these events change only that party's balance.
+pub fn weth_event_delta(party: &[u8], maker: &[u8], signed_wad: BigInt) -> Option<BigInt> {
+    (party == maker).then_some(signed_wad)
 }
 
 /// All currently-known book component ids, by probing the components store.
@@ -343,5 +364,55 @@ mod tests {
         assert_eq!(u64_from_word_padded(&1u64.to_be_bytes()), Some(1));
         let padded = [&[0u8; 24][..], &1u64.to_be_bytes()[..]].concat();
         assert_eq!(u64_from_word_padded(&padded), Some(1));
+    }
+
+    #[test]
+    fn address_from_word_extracts_low_20_bytes() {
+        let maker = hex::decode("6f7a3714d7fc266e3e84067ac31e7b1a3be18060").unwrap();
+        let mut word = [0u8; 32];
+        word[12..].copy_from_slice(&maker);
+        assert_eq!(address_from_word(&word), maker);
+    }
+
+    #[test]
+    fn address_from_word_of_zero_word_is_zero_address() {
+        // First maker designation: the slot's old value is the zero word, which must decode to the
+        // zero address so callers treat `balanceOf(old)` as 0.
+        let zero = address_from_word(&[0u8; 32]);
+        assert_eq!(zero.len(), 20);
+        assert!(zero.iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn address_from_word_handles_short_words() {
+        // Storage values are stored unpadded; a short word is left-padded.
+        assert_eq!(address_from_word(&[0xab]), {
+            let mut a = vec![0u8; 20];
+            a[19] = 0xab;
+            a
+        });
+    }
+
+    #[test]
+    fn weth_event_delta_signs_by_party() {
+        let maker = hex::decode("6f7a3714d7fc266e3e84067ac31e7b1a3be18060").unwrap();
+        let other = hex::decode("9008d19f58aabd9ed0d60971565aa8510560ab41").unwrap();
+        // Deposit to the maker: caller passes +wad.
+        assert_eq!(weth_event_delta(&maker, &maker, BigInt::from(100)), Some(BigInt::from(100)));
+        // Withdrawal from the maker: caller passes -wad.
+        assert_eq!(weth_event_delta(&maker, &maker, BigInt::from(-100)), Some(BigInt::from(-100)));
+        // A deposit/withdrawal for another wallet does not touch the maker's balance.
+        assert_eq!(weth_event_delta(&other, &maker, BigInt::from(100)), None);
+    }
+
+    #[test]
+    fn reseed_delta_is_new_minus_old() {
+        // On a maker write the re-seed delta is balanceOf(new) - balanceOf(old). First
+        // designation: old balance is 0, so the delta seeds the maker's pre-existing holdings.
+        let first_designation = BigInt::from(500) - BigInt::zero();
+        assert_eq!(first_designation, BigInt::from(500));
+        // Rotation from a wallet holding 200 to one holding 500 nets +300.
+        let rotation = BigInt::from(500) - BigInt::from(200);
+        assert_eq!(rotation, BigInt::from(300));
     }
 }

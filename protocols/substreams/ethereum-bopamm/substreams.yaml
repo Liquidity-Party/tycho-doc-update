@@ -59,6 +59,7 @@ modules:
     inputs:
       - params: string
       - source: sf.ethereum.type.v2.Block
+      - map: map_components
       - store: store_components
       - store: store_maker
     output:
