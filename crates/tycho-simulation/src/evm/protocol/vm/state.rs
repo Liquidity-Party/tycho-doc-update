@@ -72,6 +72,12 @@ where
     adapter_contract: TychoSimulationContract<D>,
     /// Tokens for which balance overwrites should be disabled.
     disable_overwrite_tokens: HashSet<Address>,
+    /// Tokens whose owning protocol does not emit token contract storage (self-contained mocks).
+    /// For these tokens the overwrites grant the balance holders a custom approval and seed the
+    /// swap recipient a custom balance, so `transferFrom` is handled entirely by the proxy's local
+    /// bookkeeping and never delegates to an implementation another protocol may have left on the
+    /// shared token in the DB.
+    self_contained_tokens: HashSet<Address>,
     /// Block context overrides applied to this pool's adapter simulations.
     block_overrides: Option<BlockEnvOverrides>,
 }
@@ -117,6 +123,7 @@ where
         manual_updates: bool,
         adapter_contract: TychoSimulationContract<D>,
         disable_overwrite_tokens: HashSet<Address>,
+        self_contained_tokens: HashSet<Address>,
         block_overrides: Option<BlockEnvOverrides>,
     ) -> Self {
         Self {
@@ -132,6 +139,7 @@ where
             manual_updates,
             adapter_contract,
             disable_overwrite_tokens,
+            self_contained_tokens,
             block_overrides,
         }
     }
@@ -485,6 +493,23 @@ where
 
         res.push(overwrites.get_overwrites());
 
+        // For self-contained tokens, mark EXTERNAL_ACCOUNT (the swap recipient) as a tracked
+        // holder of the output token, so a `transferFrom` to it is credited by the proxy's local
+        // bookkeeping instead of bootstrapping its balance via the implementation.
+        for token in tokens.iter().skip(1) {
+            if self
+                .self_contained_tokens
+                .contains(token) &&
+                !self
+                    .disable_overwrite_tokens
+                    .contains(token)
+            {
+                let mut recipient = TokenProxyOverwriteFactory::new(*token, None);
+                recipient.set_balance(U256::ZERO, *EXTERNAL_ACCOUNT);
+                res.push(recipient.get_overwrites());
+            }
+        }
+
         // Merge all overwrites into a single HashMap
         Ok(res
             .into_iter()
@@ -521,6 +546,14 @@ where
             for (token, bal) in &self.balances {
                 let mut overwrites = TokenProxyOverwriteFactory::new(*token, None);
                 overwrites.set_balance(*bal, address);
+                // Self-contained tokens: also grant the holder a custom approval so a
+                // `transferFrom` from it is handled locally instead of delegating to the impl.
+                if self
+                    .self_contained_tokens
+                    .contains(token)
+                {
+                    overwrites.set_has_custom_approval(address);
+                }
                 balance_overwrites.extend(overwrites.get_overwrites());
             }
         }
@@ -531,6 +564,12 @@ where
             for (token, balance) in balances {
                 let mut overwrites = TokenProxyOverwriteFactory::new(*token, None);
                 overwrites.set_balance(*balance, *contract);
+                if self
+                    .self_contained_tokens
+                    .contains(token)
+                {
+                    overwrites.set_has_custom_approval(*contract);
+                }
                 balance_overwrites.extend(overwrites.get_overwrites());
             }
         }

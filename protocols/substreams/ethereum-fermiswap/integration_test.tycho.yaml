@@ -17,7 +17,7 @@ protocol_type_names:
 tests:
   - name: test_weth_usdt_pair_creation
     start_block: 25192975
-    stop_block: 25200962 # WETH/USDT oracle updateState lane in the registry.
+    stop_block: 25194975
     expected_components:
       - id: "0x7c85004568584fbf3665f41ebe85146ee0483587d65d9ea5a56c79816bb720d0"
         tokens:
