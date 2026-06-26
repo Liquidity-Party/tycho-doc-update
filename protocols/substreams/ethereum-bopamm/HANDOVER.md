@@ -1,8 +1,9 @@
 # BopAMM (Bebop PMM) — Tycho Integration Handover
 
 Everything learned about BopAMM's on-chain design, its interfaces, and how this Substreams
-package indexes it. Written so the next engineer can pick up the remaining work (simulation
-adapter, quote-override stream, extractor registration) without re-deriving the protocol.
+package indexes it. The indexing + VM simulation are done (both books simulate end-to-end);
+the remaining work (§8) is the ENG-6161 simulation fix, extractor registration / spkg
+release, and the documented robustness gaps.
 
 > All facts below were verified on Ethereum mainnet (archive node + Tenderly + live
 > `substreams run`). Addresses are mainnet. The venue is **live but intermittent** (369
@@ -116,9 +117,14 @@ USDC=9. (Not used by this package — see §6.)
 
 **Consequence for VM simulation:** pricing is fully reproducible from indexed storage +
 bytecode (no external calls, no ecrecover on the read path, no DCI), **but** the simulation
-must run with `block.timestamp`/`block.number` pinned to each book's committed snapshot — fed
-by an external **quote-override stream** (out of scope for indexing; see §8). Per-book
-timestamps are independent, so each book is pinned separately.
+must run with `block.timestamp` pinned to each book's committed quote timestamp. This is
+handled by the **`override_block_timestamp`** dynamic attribute the package emits per book
+(consumed by `tycho-simulation`, PR #1034) — **no separate quote-override stream is needed**,
+and only the timestamp is pinned (the registry gate checks timestamp, not block number). The
+two books commit at **different blocks**, so each carries its own `override_block_timestamp`
+and is pinned independently; they are never both "fresh" at the same raw block. Verified
+end-to-end: the `protocol-testing` harness simulates **both** books (WETH/USDC and WBTC/USDC,
+both directions) from the indexed snapshot (see §9).
 
 ---
 
@@ -142,10 +148,18 @@ hardcoded addresses; the package can target another deployment by changing param
    (`token:0x{addr}`), so a token or book id resolves back to its component.
 3. **`store_maker`** — tracks the global maker from writes to the maker slot (`set` policy ⇒
    rotation propagates).
-4. **`map_relative_balances`** — maker inventory TVL from ERC20 `Transfer`s touching the
-   maker; USDC deltas are emitted under **every** book (shared quote inventory duplicated,
-   not split — by design, since the client does not dedupe and under-reporting risks
-   min-TVL filtering).
+4. **`map_relative_balances`** — maker inventory TVL, combining three sources so the
+   accumulated balance tracks the maker's true holdings: (a) **seed on new book** — snapshot
+   `balanceOf(maker, asset)` via eth_call; (b) **seed/re-seed on a maker-slot write** — every
+   tracked token re-seeded by `balanceOf(M_new) − balanceOf(M_old)` (on first designation
+   `M_old`=0, so this captures holdings the maker already had — the venue sets the maker at
+   25171618, *after* the books exist at 25171616); (c) **event deltas** — ERC20 `Transfer`
+   touching the maker, plus WETH `Deposit`/`Withdrawal` (the maker wrapping/unwrapping ETH,
+   which changes the WETH balance without a `Transfer` log). A `seeded_tokens` guard skips a
+   token's event deltas in a block where it was snapshotted. USDC deltas are emitted under
+   **every** book (shared quote inventory duplicated, not split — the client does not dedupe
+   and under-reporting risks min-TVL filtering). Takes `map_components` as an input to see
+   newly-created books in-block.
 5. **`store_balances`** — `StoreAddBigInt` → absolute balances.
 6. **`map_protocol_changes`** — assembles `BlockChanges`: new components + `balance_owner`
    dynamic attr, absolute balances, full storage+code of the three contracts
@@ -155,11 +169,17 @@ hardcoded addresses; the package can target another deployment by changing param
    each quote refresh and on shared-module changes.
 
 ### Notable decisions
-- **Transfer-delta balances, not slot-read.** Slot-read (Balancer-V3 `get_vault_reserves`
-  pattern) gives absolute balances but needs each token's `balanceOf` slot, which is unknown
-  in-substreams for a *new* asset → would break auto new-market TVL. Transfer-delta is
-  universal. Trade-off: a maker rotation to a pre-funded wallet under-reports until an RPC
-  re-seed (rotation has never happened; mitigatable).
+- **Event-delta balances seeded by `balanceOf` snapshots, not per-block slot-read.** Slot-read
+  (Balancer-V3 `get_vault_reserves` pattern) needs each token's `balanceOf` slot, unknown
+  in-substreams for a *new* asset. Instead the package tracks the maker's balance via `Transfer`
+  + WETH `Deposit`/`Withdrawal` deltas, and seeds the absolute value with a `balanceOf` eth_call
+  whenever a token starts being tracked or the maker changes (mirrors the `ethereum-fermiswap`
+  approach). This fixes the two gaps a pure Transfer-delta model had: pre-existing maker
+  holdings (snapshot on designation) and WETH wrap/unwrap (Deposit/Withdrawal). **Maker-rotation
+  caveat:** the re-seed uses `balanceOf(M_old)` as a proxy for the accumulated store value (an
+  additive store can't be read back in this module without a graph cycle) — exact on first
+  designation (`M_old`=0) and effectively exact for these non-rebasing tokens; the venue has
+  never rotated.
 - **`balance_owner` is a dynamic attribute**, emitted whenever the maker slot is written
   (`extract_maker_changes`) — because the maker is configured *after* book creation, and the
   maker can rotate.
@@ -187,36 +207,61 @@ hardcoded addresses; the package can target another deployment by changing param
 ## 8. Remaining work (next steps)
 
 1. ~~VM swap adapter~~ — **done**: `BopAMMAdapter` under
-   `protocols/adapter-integration/evm/src/bopamm/` (sell-side; quote-driven limits via
-   bisection; see its manifest). The §5 timestamp gate is handled by the
-   `override_block_timestamp` attribute consumed by `tycho-simulation` (PR #1034); no
-   separate quote-override stream is needed. When simulating `swap()` (not just `quote()`),
-   the maker's token balance must still be present in the simulated token contracts — it is
-   *not* in the tracked contract set; pricing doesn't need it but settlement transfers do.
-2. **`extractors.yaml` `vm:bopamm` entry** — the entry itself is 8 trivial fields (see PR
-   description / repo `extractors.yaml`); the real prerequisite is **releasing the spkg to
-   S3** via `protocols/substreams/release.sh ethereum-bopamm` (spkgs are gitignored, fetched
-   from S3 at runtime). Params are baked into the spkg by `substreams pack`.
-3. **Robustness gaps** (documented, not blocking the MVP):
+   `protocols/adapter-integration/evm/src/bopamm/` (sell-side; quote-driven amount and limits;
+   see its manifest). The §5 timestamp gate is handled by the `override_block_timestamp`
+   attribute (PR #1034). The maker's token balance does **not** need to be indexed for
+   simulation — the tycho-simulation VM engine pulls it from RPC on demand when running the
+   adapter swap (proven: the harness simulates both books with correct amounts, §9). The
+   adapter derives its amount from `settlement.quote(...)`, not a balance diff.
+2. **ENG-6161 (TokenProxy implementation-slot poisoning) — flagged, fix deferred.** BopAMM is
+   a *conditional victim* (not a poisoner — it emits no token-contract storage). The settlement
+   swap's internal `buyToken.transferFrom(maker→taker)` runs through the simulation `TokenProxy`;
+   the engine seeds the maker's balance but **not** its output-side approval, so that op takes
+   the proxy's Branch-B delegate-fallback — a safe no-op only while `IMPLEMENTATION_SLOT == 0`.
+   A co-running token-emitting VM protocol (curve/balancer) flips that slot non-zero in the
+   shared DB → the op reverts → `get_amount_out` errors. Exposure is a **revert** (not a wrong
+   amount, since the amount is quote-derived). The `clear_implementation` remedy that protects
+   FermiSwap is **not on this branch**. Recommended fix (a tycho-simulation change, not a
+   bopamm-package change): port `clear_implementation`; safe here because the tokens
+   (WETH/WBTC/USDC) are self-contained. Full analysis: `ENG-6161-bopamm-eval.md`.
+3. **`extractors.yaml` `vm:bopamm` entry** — the entry itself is 8 trivial fields; the real
+   prerequisite is **releasing the spkg to S3** via `protocols/substreams/release.sh
+   ethereum-bopamm` (spkgs are gitignored, fetched from S3 at runtime). Params are baked into
+   the spkg by `substreams pack`.
+4. **Robustness gaps** (documented, not blocking the MVP):
    - Asset **delisting** (`non-zero→0` config) is not handled → a removed book stays
      "active". Components are immutable; would need a deactivation signal.
-   - **Maker rotation** to a pre-funded wallet under-reports TVL until the new maker's first
-     fill (or an RPC re-seed).
+   - **Maker rotation** is now handled by re-seeding from `balanceOf` snapshots, but with the
+     additive-store approximation noted in §6 (exact on first designation; the venue has never
+     rotated).
 
 ---
 
 ## 9. Verification done
 
-- 8 unit tests (incl. the real `updateState` calldata decode, the `bookId==assetId`
+- 23 unit tests (incl. the real `updateState` calldata decode, the `bookId==assetId`
   cross-lock, `asset_config_slot` keccak vs on-chain, batch decode, token-index regression,
-  params parse). `clippy -D warnings` + nightly `fmt` clean; host + wasm32 build; `substreams
-  pack` succeeds.
-- Two adversarial review agents + a live `substreams run` against
-  `mainnet.eth.streamingfast.io` over the creation range (25171610–21) and an active range
-  (~25.26M): both books created with correct ids/tokens/attrs/creation_tx; the quote
-  timestamp attribute on `updateState`; maker balances under both books; `balance_owner` emitted
-  at 25171618. Two bugs were found and fixed during review (balance_owner timing; token-index
-  sort-order dropping WETH balances).
+  params parse, `enumerate_books` short-circuit/gap, WETH Deposit/Withdrawal sign, balance
+  double-count guard). `clippy -D warnings` + nightly `fmt` clean; host + wasm32 build;
+  `substreams pack` succeeds.
+- **`protocol-testing` harness passes 2/2** (`test_book_discovery` + `test_book_simulation`),
+  indexing → simulation end-to-end from the indexed snapshot. **Both** books simulate (spot
+  price, limits, amount out both directions): book 0 (WETH/USDC) and book 1 (WBTC/USDC). Book 1
+  is one-sided at its *first* commit (25252477: `USDC→WBTC` reverts `InsufficientLiquidity`) and
+  becomes two-sided at its 25266022 commit, which is why the simulation test's stop block is
+  pinned there. Harness prerequisites: a Docker Postgres (`testing-db-1` on :5431), the
+  `tycho-indexer` binary on PATH, and an archive `RPC_URL` that supports `debug_storageRangeAt`
+  (needed to bootstrap the registry, which predates the test range — see `initialized_accounts`).
+- Live `substreams run` over the creation + maker-set range (25171610–20): both books created
+  with correct ids/tokens/attrs/creation_tx; `override_block_timestamp` on `updateState`; maker
+  balances seeded at the maker-set block 25171618 (USDC, WETH, WBTC under the right books);
+  `balance_owner` emitted.
+- Bugs found and fixed during review across iterations: `balance_owner` timing; token-index
+  sort-order dropping WETH balances; a same-block book-create + maker-designate double-count in
+  the balance re-seed.
+- **Harness gotcha:** `run_simulation` only iterates *decoded* states, so a `skip_simulation:
+  false` component whose VM state fails to decode is silently dropped and the test passes
+  *vacuously* — always confirm real `Simulated amount out` lines appear, not just `Passed N/N`.
 
 ---
 
