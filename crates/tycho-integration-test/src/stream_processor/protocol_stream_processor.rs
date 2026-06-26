@@ -17,10 +17,13 @@ use tycho_simulation::{
             aerodrome_slipstreams::state::AerodromeSlipstreamsState,
             aerodrome_v1::state::AerodromeV1State,
             cowamm::state::CowAMMState,
+            curve::CurveState,
             ekubo::state::EkuboState,
             ekubo_v3::{self, state::EkuboV3State},
             erc4626::state::ERC4626State,
-            filters::{balancer_v2_pool_filter, erc4626_filter, fluid_v1_paused_pools_filter},
+            filters::{
+                balancer_v2_pool_filter, curve_filter, erc4626_filter, fluid_v1_paused_pools_filter,
+            },
             fluid::FluidV1,
             lunarbase::LunarBaseTychoState,
             pancakeswap_v2::state::PancakeswapV2State,
@@ -289,10 +292,10 @@ impl ProtocolStreamProcessor {
                 );
             }
             "vm:curve" => {
-                stream = stream.exchange::<EVMPoolState<PreCachedDB>>(
+                stream = stream.exchange::<CurveState>(
                     "vm:curve",
                     tvl_filter.clone(),
-                    None,
+                    Some(curve_filter),
                 );
             }
             "uniswap_v4_hooks" => {

@@ -93,6 +93,16 @@ pub fn fluid_v1_paused_pools_filter(component: &ComponentWithState) -> bool {
     true
 }
 
+/// Filters `vm:curve` components to those the hybrid `CurveState` can quote.
+///
+/// Rebasing pools (e.g. stETH) are included: the hybrid reads live coin balances via VM getters at
+/// decode time, so in-place rebases are reflected as long as the rebasing token's contract is part
+/// of the indexed state. Pools whose getters touch un-indexed contracts fail to decode and are
+/// skipped by the stream (`StateDecodingFailure`) rather than producing wrong quotes.
+pub fn curve_filter(_component: &ComponentWithState) -> bool {
+    true
+}
+
 pub fn erc4626_filter(component: &ComponentWithState) -> bool {
     const UNSUPPORTED_POOLS: [&str; 4] = [
         "0x28B3a8fb53B741A8Fd78c0fb9A6B2393d896a43d",
