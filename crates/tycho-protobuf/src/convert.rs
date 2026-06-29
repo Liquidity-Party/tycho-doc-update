@@ -53,9 +53,11 @@ fn bytes_to_f64(data: &[u8]) -> Option<f64> {
     } else {
         let lsb = (x.clone() >> n_shifts.unsigned_abs() as usize) & BigInt::one();
         let round_bit = (x.clone() >> (n_shifts.unsigned_abs() as usize - 1)) & BigInt::one();
-        let sticky_bit = x.clone() &
-            ((BigInt::one() << std::cmp::max(n_shifts.unsigned_abs() as usize - 2, 0)) -
-                BigInt::one());
+        // Clamp the sticky-bit shift in signed space: when the value uses exactly 54 bits the
+        // shift is `abs - 2 == -1`, which must saturate to 0. Doing this subtraction in usize
+        // would underflow and trigger a multi-exabyte BigInt allocation.
+        let sticky_shift = std::cmp::max(n_shifts.unsigned_abs() as i64 - 2, 0) as usize;
+        let sticky_bit = x.clone() & ((BigInt::one() << sticky_shift) - BigInt::one());
 
         let rounded_towards_zero = (x.clone() >> n_shifts.unsigned_abs() as usize)
             .to_u64()
@@ -551,5 +553,30 @@ impl TryFromMessage for BlockChanges {
         } else {
             Err(DecodeError::Empty)
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use num_bigint::BigUint;
+    use rstest::rstest;
+
+    use super::*;
+
+    #[rstest]
+    #[case::one(BigUint::one(), 1.0f64)]
+    #[case::two(BigUint::from(2u64), 2.0f64)]
+    #[case::zero(BigUint::from(0u64), 0.0f64)]
+    #[case::two_pow190(BigUint::from(2u64).pow(190), 2.0f64.powi(190))]
+    #[case::max32(BigUint::from(u32::MAX as u64), u32::MAX as f64)]
+    #[case::max64(BigUint::from(u64::MAX), u64::MAX as f64)]
+    #[case::edge_54bits_trailing_zeros(BigUint::from(2u64.pow(53)), 2u64.pow(53) as f64)]
+    #[case::edge_54bits_trailing_ones(BigUint::from(2u64.pow(54) - 1), (2u64.pow(54) - 1) as f64)]
+    #[case::edge_53bits_trailing_zeros(BigUint::from(2u64.pow(52)), 2u64.pow(52) as f64)]
+    #[case::edge_53bits_trailing_ones(BigUint::from(2u64.pow(53) - 1), (2u64.pow(53) - 1) as f64)]
+    fn test_bytes_to_f64(#[case] inp: BigUint, #[case] out: f64) {
+        let bytes = inp.to_bytes_be();
+        let res = bytes_to_f64(&bytes).unwrap();
+        assert_eq!(res, out);
     }
 }
