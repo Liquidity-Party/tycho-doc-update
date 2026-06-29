@@ -53,17 +53,9 @@ fn register_exchanges(
                 .exchange::<UniswapV2State>("sushiswap_v2", tvl_filter.clone(), None)
                 .exchange::<PancakeswapV2State>("pancakeswap_v2", tvl_filter.clone(), None)
                 .exchange::<UniswapV3State>("pancakeswap_v3", tvl_filter.clone(), None)
-                .exchange::<EVMPoolState<PreCachedDB>>(
-                    "vm:balancer_v2",
-                    tvl_filter.clone(),
-                    Some(balancer_v2_pool_filter),
-                )
+                .exchange::<EVMPoolState<PreCachedDB>>("vm:balancer_v2", tvl_filter.clone(), Some(balancer_v2_pool_filter))
                 .exchange::<EkuboState>("ekubo_v2", tvl_filter.clone(), None)
-                .exchange::<EkuboV3State>(
-                    "ekubo_v3",
-                    tvl_filter.clone(),
-                    Some(ekubo_v3_extension_filter),
-                )
+                .exchange::<EkuboV3State>("ekubo_v3", tvl_filter.clone(), Some(ekubo_v3_extension_filter))
                 .exchange::<EVMPoolState<PreCachedDB>>("vm:curve", tvl_filter.clone(), None)
                 .exchange::<EVMPoolState<PreCachedDB>>("vm:maverick_v2", tvl_filter.clone(), None)
         }
@@ -73,11 +65,7 @@ fn register_exchanges(
                 .exchange::<UniswapV3State>("uniswap_v3", tvl_filter.clone(), None)
                 .exchange::<UniswapV4State>("uniswap_v4", tvl_filter.clone(), None)
                 .exchange::<UniswapV3State>("pancakeswap_v3", tvl_filter.clone(), None)
-                .exchange::<AerodromeSlipstreamsState>(
-                    "aerodrome_slipstreams",
-                    tvl_filter.clone(),
-                    None,
-                )
+                .exchange::<AerodromeSlipstreamsState>("aerodrome_slipstreams", tvl_filter.clone(), None)
         }
         Chain::Unichain => {
             builder = builder
