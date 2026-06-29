@@ -1,3 +1,80 @@
+## [0.318.1](https://github.com/propeller-heads/tycho/compare/0.318.0...0.318.1) (2026-06-25)
+
+
+### Bug Fixes
+
+* **client:** improve reconnect handling ([#1073](https://github.com/propeller-heads/tycho/issues/1073)) ([193de92](https://github.com/propeller-heads/tycho/commit/193de92119f60e631a01c126f016c81be990a4c4))
+* **lunarbase:** emit reserve-based token balances ([0043389](https://github.com/propeller-heads/tycho/commit/004338900fea2ced2c332f608baadf136e8f1a84))
+* **lunarbase:** emit reserve-based token balances ([#1113](https://github.com/propeller-heads/tycho/issues/1113)) ([87b7e1d](https://github.com/propeller-heads/tycho/commit/87b7e1d0b3c5e28316307f958c7513e9aac95b92))
+* **tycho-client:** double default WS buffer sizes to 256 ([21853a9](https://github.com/propeller-heads/tycho/commit/21853a9935f30c12da0d4d440a55ba662ae86d68))
+* **tycho-client:** loop in ensure_connection on transient WS reconnect ([08aad92](https://github.com/propeller-heads/tycho/commit/08aad9260094273570eed0a87371382790fe56d2))
+* **tycho-client:** unblock ensure_connection callers on close ([5e53d63](https://github.com/propeller-heads/tycho/commit/5e53d637b9cc6cf25e7778a278167879030217ab))
+
+## [0.318.0](https://github.com/propeller-heads/tycho/compare/0.317.4...0.318.0) (2026-06-24)
+
+
+### Features
+
+* update vm gas estimations ([20f0a04](https://github.com/propeller-heads/tycho/commit/20f0a0464f036f5c71588e098b1d621a29dfc295))
+* update vm gas estimations ([#1100](https://github.com/propeller-heads/tycho/issues/1100)) ([5d19fe6](https://github.com/propeller-heads/tycho/commit/5d19fe693c9f9066db3b0c69607a65fde19ccb00))
+
+## [0.317.4](https://github.com/propeller-heads/tycho/compare/0.317.3...0.317.4) (2026-06-24)
+
+
+### Bug Fixes
+
+* **ci:** scope substreams secrets to the test job ([e3ce91a](https://github.com/propeller-heads/tycho/commit/e3ce91a6ce682b535deeca1f26bf1461e0b123d2))
+* **ci:** scope substreams secrets to the test job ([#1114](https://github.com/propeller-heads/tycho/issues/1114)) ([e9a9cc7](https://github.com/propeller-heads/tycho/commit/e9a9cc77e6cbe8ef71a656130c6e2731c6968db0))
+
+## [0.317.3](https://github.com/propeller-heads/tycho/compare/0.317.2...0.317.3) (2026-06-23)
+
+
+### Bug Fixes
+
+* **ci:** gate remaining pull_request_target fork runs ([5c44c1c](https://github.com/propeller-heads/tycho/commit/5c44c1c6b9eae30f2963f09f22edac3d910d14cd))
+* **ci:** gate remaining pull_request_target fork runs ([#1111](https://github.com/propeller-heads/tycho/issues/1111)) ([223424f](https://github.com/propeller-heads/tycho/commit/223424f6d28589f92d2ae1401bdfa1dfc28f73d0))
+
+## [0.317.2](https://github.com/propeller-heads/tycho/compare/0.317.1...0.317.2) (2026-06-23)
+
+
+### Bug Fixes
+
+* **ci:** close pull_request_target injection and gate fork runs ([29b55a7](https://github.com/propeller-heads/tycho/commit/29b55a79c1a2a2817e5e898bc24d6112f7f6c842))
+* **ci:** close pull_request_target injection and gate fork runs ([#1109](https://github.com/propeller-heads/tycho/issues/1109)) ([868ea0b](https://github.com/propeller-heads/tycho/commit/868ea0bc75504be0c5a4b634d61db76f0d54608e))
+
+## [0.317.1](https://github.com/propeller-heads/tycho/compare/0.317.0...0.317.1) (2026-06-23)
+
+
+### Bug Fixes
+
+* add explicit comments for clippy allow ([d79f5a4](https://github.com/propeller-heads/tycho/commit/d79f5a480bacdabde3821a049fcdf994ef85821f))
+* address clippy for private interface ([7c864a0](https://github.com/propeller-heads/tycho/commit/7c864a0756cb51062fe7ab8f5543c68eea4ffbed))
+* fix cargo audit ([#1108](https://github.com/propeller-heads/tycho/issues/1108)) ([8acd319](https://github.com/propeller-heads/tycho/commit/8acd31995d5a632d680127d81033e61d05076ade))
+* update dependency with vulnerability ([b524d7a](https://github.com/propeller-heads/tycho/commit/b524d7a964f4e3b1ffc45d99c4cff64abff4fe2b))
+
+## [0.317.0](https://github.com/propeller-heads/tycho/compare/0.316.0...0.317.0) (2026-06-23)
+
+
+### Features
+
+* add lunarbase executor ([a26c697](https://github.com/propeller-heads/tycho/commit/a26c69777907c0da5cfa9ed75926eef3c1bc94f5))
+* add lunarbase to integration test ([eae621d](https://github.com/propeller-heads/tycho/commit/eae621d8eb9df1cbb4a80535112acf488553f396))
+* add lunarbase to integration test ([#1092](https://github.com/propeller-heads/tycho/issues/1092)) ([65ed276](https://github.com/propeller-heads/tycho/commit/65ed2766902453a9ef8b28078f2cd3c9cb6e58ac))
+
+## [0.316.0](https://github.com/propeller-heads/tycho/compare/0.315.0...0.316.0) (2026-06-23)
+
+
+### Features
+
+* **fee-calculator:** Use tx.origin for custom fee when client is zero ([19c6dd6](https://github.com/propeller-heads/tycho/commit/19c6dd6586fefdcbf0f5b8acfce7f903230516cf))
+* **fee-calculator:** Use tx.origin for custom fee when client is zero ([#1086](https://github.com/propeller-heads/tycho/issues/1086)) ([121f729](https://github.com/propeller-heads/tycho/commit/121f72962a42b1337c80704b8269e3f8aa95b4ef))
+
+
+### Bug Fixes
+
+* **deps:** bump quinn-proto to 0.11.15 for RUSTSEC-2026-0185 ([c644f10](https://github.com/propeller-heads/tycho/commit/c644f10e33a80f5aa3f36e33f1ea2b6dc2e33ae0))
+* **deps:** bump quinn-proto to 0.11.15 for RUSTSEC-2026-0185 ([#1107](https://github.com/propeller-heads/tycho/issues/1107)) ([ab8fda5](https://github.com/propeller-heads/tycho/commit/ab8fda55ebeab37c2e8e865b1987fef2bd62a9ab))
+
 ## [0.315.0](https://github.com/propeller-heads/tycho/compare/0.314.1...0.315.0) (2026-06-22)
 
 
