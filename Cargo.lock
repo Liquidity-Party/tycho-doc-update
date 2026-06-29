@@ -9604,6 +9604,7 @@ dependencies = [
  "num-bigint",
  "num-traits",
  "prost 0.11.9",
+ "rstest 0.24.0",
  "thiserror 1.0.69",
  "tracing",
  "tycho-common",
