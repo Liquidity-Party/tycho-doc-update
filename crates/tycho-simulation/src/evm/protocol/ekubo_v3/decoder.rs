@@ -23,26 +23,55 @@ use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
 use tycho_common::{models::token::Token, Bytes};
 
 use super::{
+    addresses::{
+        BOOSTED_FEES_CONCENTRATED_ADDRESS, MEV_CAPTURE_ADDRESS, ORACLE_ADDRESS, TWAMM_ADDRESS,
+    },
     attributes::{rate_deltas_from_attributes, ticks_from_attributes},
     pool::{
-        concentrated::ConcentratedPool, full_range::FullRangePool, oracle::OraclePool,
+        boosted_fees::BoostedFeesPool,
+        concentrated::ConcentratedPool,
+        full_range::FullRangePool,
+        mev_capture::MevCapturePool,
+        oracle::OraclePool,
+        stableswap::StableswapPool,
         twamm::TwammPool,
     },
     state::EkuboV3State,
 };
-use crate::{
-    evm::protocol::ekubo_v3::{
-        extension_type,
-        pool::{
-            boosted_fees::BoostedFeesPool, mev_capture::MevCapturePool, stableswap::StableswapPool,
-        },
-        ExtensionType,
-    },
-    protocol::{
-        errors::InvalidSnapshotError,
-        models::{DecoderContext, TryFromWithBlock},
-    },
+use crate::protocol::{
+    errors::InvalidSnapshotError,
+    models::{DecoderContext, TryFromWithBlock},
 };
+
+pub enum ExtensionType {
+    NoSwapCallPoints,
+    Oracle,
+    Twamm,
+    MevCapture,
+    BoostedFees,
+}
+
+fn has_no_swap_call_points(extension: Address) -> bool {
+    // Call points are encoded in the first byte of the extension address.
+    // Bit 6 == beforeSwap, bit 5 == afterSwap.
+    extension[0] & 0b0110_0000 == 0
+}
+
+pub fn extension_type(extension: Address) -> Option<ExtensionType> {
+    Some(if has_no_swap_call_points(extension) {
+        ExtensionType::NoSwapCallPoints
+    } else if extension == ORACLE_ADDRESS {
+        ExtensionType::Oracle
+    } else if extension == TWAMM_ADDRESS {
+        ExtensionType::Twamm
+    } else if extension == MEV_CAPTURE_ADDRESS {
+        ExtensionType::MevCapture
+    } else if extension == BOOSTED_FEES_CONCENTRATED_ADDRESS {
+        ExtensionType::BoostedFees
+    } else {
+        return None;
+    })
+}
 
 struct TimedStateDetails {
     rate_token0: u128,

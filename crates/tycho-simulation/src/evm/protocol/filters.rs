@@ -1,8 +1,7 @@
-use revm::primitives::Address;
 use tracing::{debug, info};
 use tycho_client::feed::synchronizer::ComponentWithState;
 
-use crate::evm::protocol::ekubo_v3::extension_type;
+pub use crate::evm::protocol::ekubo_v3::filter_fn as ekubo_v3_extension_filter;
 
 /// Filters out pools that DCI currently fails to find some accounts for
 pub fn balancer_v2_pool_filter(component: &ComponentWithState) -> bool {
@@ -113,16 +112,4 @@ pub fn erc4626_filter(component: &ComponentWithState) -> bool {
         return false;
     }
     true
-}
-
-/// Filters out unsupported ekubo_v3 extensions.
-pub fn ekubo_v3_extension_filter(component: &ComponentWithState) -> bool {
-    component
-        .component
-        .static_attributes
-        .get("extension")
-        .is_some_and(|extension_bytes| {
-            Address::try_from(&extension_bytes[..])
-                .is_ok_and(|extension| extension_type(extension).is_some())
-        })
 }
