@@ -2570,6 +2570,70 @@ fn test_single_encoding_strategy_liquorice_settle_single() {
 }
 
 #[test]
+fn test_single_encoding_strategy_metric() {
+    // Generates calldata for TychoRouterForMetricTest Solidity integration test.
+    // WETH -> USDC via Metric RFQ on Base (wethusdc pool 0x770004fE).
+    // Uses the Never oracle update policy: the pool relies on its on-chain price
+    // at the fork block, so no signed oracle update is encoded.
+    let weth_base = Bytes::from_str("0x4200000000000000000000000000000000000006").unwrap();
+    let usdc_base = Bytes::from_str("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913").unwrap();
+
+    let metric_component = ProtocolComponent {
+        id: String::from("0x770004fE4411E42eA51a7fcAca32b267d791f3D4"),
+        protocol_system: String::from("rfq:metric"),
+        // Token order must match the pool's token0/token1 so the encoder can
+        // derive the swap direction (WETH = token0, USDC = token1).
+        tokens: vec![weth_base.clone(), usdc_base.clone()],
+        // oracle_update_policy = 0 (Never).
+        static_attributes: HashMap::from([(
+            "oracle_update_policy".to_string(),
+            Bytes::from(vec![0u8]),
+        )]),
+        ..Default::default()
+    };
+
+    let swap = Swap::new(
+        metric_component,
+        default_token(weth_base.clone()),
+        default_token(usdc_base.clone()),
+        BigUint::ZERO,
+    );
+
+    let encoder = get_tycho_router_encoder(Chain::Base);
+
+    let solution = Solution::new(
+        Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        weth_base,
+        usdc_base,
+        BigUint::from_str("1_000000000000000000").unwrap(),
+        BigUint::from_str("1000").unwrap(),
+        vec![swap],
+    );
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
+
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file("test_single_encoding_strategy_metric", hex_calldata.as_str());
+}
+
+#[test]
 fn test_evm_two_hop_usv4_twif_intermediary() {
     // UniswapV4 cyclical swaps encoded as two separate hops with TWIF (6%
     // fee-on-transfer) as intermediary. Same pool used in both directions to
