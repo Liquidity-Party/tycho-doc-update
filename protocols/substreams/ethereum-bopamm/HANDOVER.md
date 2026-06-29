@@ -213,17 +213,25 @@ hardcoded addresses; the package can target another deployment by changing param
    simulation — the tycho-simulation VM engine pulls it from RPC on demand when running the
    adapter swap (proven: the harness simulates both books with correct amounts, §9). The
    adapter derives its amount from `settlement.quote(...)`, not a balance diff.
-2. **ENG-6161 (TokenProxy implementation-slot poisoning) — flagged, fix deferred.** BopAMM is
-   a *conditional victim* (not a poisoner — it emits no token-contract storage). The settlement
+2. **ENG-6161 (TokenProxy implementation-slot poisoning) — partial fix applied.** BopAMM is a
+   *conditional victim* (not a poisoner — it emits no token-contract storage). The settlement
    swap's internal `buyToken.transferFrom(maker→taker)` runs through the simulation `TokenProxy`;
-   the engine seeds the maker's balance but **not** its output-side approval, so that op takes
-   the proxy's Branch-B delegate-fallback — a safe no-op only while `IMPLEMENTATION_SLOT == 0`.
-   A co-running token-emitting VM protocol (curve/balancer) flips that slot non-zero in the
-   shared DB → the op reverts → `get_amount_out` errors. Exposure is a **revert** (not a wrong
-   amount, since the amount is quote-derived). The `clear_implementation` remedy that protects
-   FermiSwap is **not on this branch**. Recommended fix (a tycho-simulation change, not a
-   bopamm-package change): port `clear_implementation`; safe here because the tokens
-   (WETH/WBTC/USDC) are self-contained. Full analysis: `ENG-6161-bopamm-eval.md`.
+   without intervention the engine seeds the maker's balance but **not** its output-side approval,
+   so that op takes the proxy's Branch-B delegate-fallback — a safe no-op only while
+   `IMPLEMENTATION_SLOT == 0` — and reverts once a co-running protocol (curve/balancer) poisons
+   the shared token's impl slot. Exposure is a **revert** (the amount is quote-derived, never
+   wrong). **Fix applied:** `map_components` emits the `self_contained_tokens = [asset, USDC]`
+   static attribute, mirroring FermiSwap's PR #1118 remedy; the generic tycho-simulation reader
+   (#1118) then grants the maker (`balance_owner`) a custom approval and seeds the recipient's
+   output balance, resolving the maker→taker leg locally. **Residual gap:** the two *sell-token*
+   legs through the settlement (`sellToken.transferFrom(…→settlement)` and
+   `sellToken.transfer(settlement→maker)`) are NOT covered — the settlement is an
+   `involved_contract`, not the `balance_owner`, so it gets no custom balance/approval (FermiSwap
+   has no analogue: its intermediary *is* the balance_owner). Their exposure is bytecode-dependent
+   (unverified settlement) and was not the observed failure; if they prove exposed, close them by
+   emitting a contract balance for the settlement so #1118 grants it a custom approval. **Depends
+   on #1118:** the attribute is inert until #1118's tycho-simulation changes are on the branch.
+   Full analysis: `ENG-6161-bopamm-eval.md` + `ENG-6161-bopamm-selfcontained-eval.md`.
 3. **`extractors.yaml` `vm:bopamm` entry** — the entry itself is 8 trivial fields; the real
    prerequisite is **releasing the spkg to S3** via `protocols/substreams/release.sh
    ethereum-bopamm` (spkgs are gitignored, fetched from S3 at runtime). Params are baked into

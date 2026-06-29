@@ -4,6 +4,8 @@ use anyhow::Result;
 use substreams_ethereum::pb::eth;
 use tycho_substreams::prelude::*;
 
+use tycho_substreams::attributes::json_serialize_address_list;
+
 use crate::{
     common::{asset_config_slot, component_id, is_zero, MAX_ASSET_ID},
     config::DeploymentConfig,
@@ -55,6 +57,14 @@ pub fn map_components(
                 let asset_id_bytes = asset_id.to_be_bytes();
                 let mut tokens = vec![token.to_vec(), config.usdc.clone()];
                 tokens.sort_unstable();
+                // BopAMM emits no token-contract storage, so in the shared simulation DB its
+                // tokens are self-contained mock proxies. Flag them (ENG-6161) so
+                // tycho-simulation resolves their transfers via local proxy bookkeeping
+                // instead of delegating to an implementation another VM protocol indexed for
+                // the same token. This covers the maker→taker output `transferFrom` (the
+                // documented failure); the settlement-intermediary sell-token legs are a
+                // separate, bytecode-dependent residual — see HANDOVER §8.
+                let self_contained = json_serialize_address_list(&tokens);
                 components.push(
                     ProtocolComponent::new(&component_id(&config.settlement, asset_id))
                         .with_tokens(&tokens)
@@ -66,6 +76,7 @@ pub fn map_components(
                         .with_attributes(&[
                             ("asset_id", &asset_id_bytes[..]),
                             ("manual_updates", &[1u8][..]),
+                            ("self_contained_tokens", self_contained.as_slice()),
                         ])
                         .as_swap_type("bopamm_book", ImplementationType::Vm),
                 );

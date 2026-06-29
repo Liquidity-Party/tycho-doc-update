@@ -42,6 +42,7 @@ tests:
         static_attributes:
           asset_id: "0x0000000000000000"
           manual_updates: "0x01"
+          self_contained_tokens: "0x5b22307861306238363939316336323138623336633164313964346132653965623063653336303665623438222c22307863303261616133396232323366653864306130653563346632376561643930383363373536636332225d"
         creation_tx: "0x58071cb79cabce79033144d3a6b7433f61f917fc76f5b7755e6873b9cf4f8643"
         skip_simulation: true # Exact-timestamp gate; simulated in Foundry (BopAMMAdapter.t.sol). See top.
         skip_execution: true # No vm:bopamm executor registered; executed in Foundry (BopAMM.t.sol). See top.
@@ -52,6 +53,7 @@ tests:
         static_attributes:
           asset_id: "0x0000000000000001"
           manual_updates: "0x01"
+          self_contained_tokens: "0x5b22307832323630666163356535353432613737336161343466626366656466376331393362633263353939222c22307861306238363939316336323138623336633164313964346132653965623063653336303665623438225d"
         creation_tx: "0x58071cb79cabce79033144d3a6b7433f61f917fc76f5b7755e6873b9cf4f8643"
         skip_simulation: true # Exact-timestamp gate; simulated in Foundry (BopAMMAdapter.t.sol). See top.
         skip_execution: true # No vm:bopamm executor registered; executed in Foundry (BopAMM.t.sol). See top.
@@ -77,6 +79,7 @@ tests:
         static_attributes:
           asset_id: "0x0000000000000000"
           manual_updates: "0x01"
+          self_contained_tokens: "0x5b22307861306238363939316336323138623336633164313964346132653965623063653336303665623438222c22307863303261616133396232323366653864306130653563346632376561643930383363373536636332225d"
         creation_tx: "0x58071cb79cabce79033144d3a6b7433f61f917fc76f5b7755e6873b9cf4f8643"
         skip_simulation: false
         skip_execution: true # No vm:bopamm executor registered; executed in Foundry (BopAMM.t.sol). See top.
@@ -87,6 +90,7 @@ tests:
         static_attributes:
           asset_id: "0x0000000000000001"
           manual_updates: "0x01"
+          self_contained_tokens: "0x5b22307832323630666163356535353432613737336161343466626366656466376331393362633263353939222c22307861306238363939316336323138623336633164313964346132653965623063653336303665623438225d"
         creation_tx: "0x58071cb79cabce79033144d3a6b7433f61f917fc76f5b7755e6873b9cf4f8643"
         # Book 1's first commit (25252477) is one-sided (USDC->WBTC reverts), but its
         # 25266022 commit is two-sided, so at this stop block the VM state decodes and
