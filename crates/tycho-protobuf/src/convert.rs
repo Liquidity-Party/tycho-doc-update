@@ -1,8 +1,6 @@
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 
 use chrono::{DateTime, NaiveDateTime};
-use num_bigint::BigInt;
-use num_traits::{One, ToPrimitive, Zero};
 use tracing::warn;
 use tycho_common::{
     models::{
@@ -17,7 +15,7 @@ use tycho_common::{
     Bytes,
 };
 
-use crate::{error::DecodeError, pb::tycho::evm::v1 as pb};
+use crate::{error::DecodeError, pb::tycho::evm::v1 as pb, u256_num::bytes_to_f64};
 
 /// Converts protobuf messages into domain model types.
 pub trait TryFromMessage {
@@ -26,65 +24,6 @@ pub trait TryFromMessage {
     fn try_from_message(args: Self::Args<'_>) -> Result<Self, DecodeError>
     where
         Self: Sized;
-}
-
-/// Converts big-endian bytes to the closest f64 representation.
-///
-/// Uses round-to-nearest-even when truncation is required (more than 53 significant bits).
-/// Returns `None` if `data` exceeds 32 bytes or if any intermediate conversion overflows.
-fn bytes_to_f64(data: &[u8]) -> Option<f64> {
-    if data.len() > 32 {
-        warn!(?data, "Received invalid balance bytes!");
-        return None;
-    }
-    let x = BigInt::from_bytes_be(num_bigint::Sign::Plus, data);
-    if x == BigInt::zero() {
-        return Some(0.0);
-    }
-
-    let x_bits = x.bits();
-    let n_shifts = 53i32 - x_bits as i32;
-    let mut exponent = (1023 + 52 - n_shifts) as u64;
-
-    let mut significant = if n_shifts >= 0 {
-        (x.clone() << n_shifts as usize)
-            .to_u64()
-            .expect("unable to convert to u64")
-    } else {
-        let lsb = (x.clone() >> n_shifts.unsigned_abs() as usize) & BigInt::one();
-        let round_bit = (x.clone() >> (n_shifts.unsigned_abs() as usize - 1)) & BigInt::one();
-        // Clamp the sticky-bit shift in signed space: when the value uses exactly 54 bits the
-        // shift is `abs - 2 == -1`, which must saturate to 0. Doing this subtraction in usize
-        // would underflow and trigger a multi-exabyte BigInt allocation.
-        let sticky_shift = std::cmp::max(n_shifts.unsigned_abs() as i64 - 2, 0) as usize;
-        let sticky_bit = x.clone() & ((BigInt::one() << sticky_shift) - BigInt::one());
-
-        let rounded_towards_zero = (x.clone() >> n_shifts.unsigned_abs() as usize)
-            .to_u64()
-            .expect("unable to convert to u64");
-
-        if round_bit == BigInt::one() {
-            if sticky_bit == BigInt::zero() {
-                if lsb == BigInt::zero() {
-                    rounded_towards_zero
-                } else {
-                    rounded_towards_zero + 1
-                }
-            } else {
-                rounded_towards_zero + 1
-            }
-        } else {
-            rounded_towards_zero
-        }
-    };
-
-    if significant & (1 << 53) > 0 {
-        significant >>= 1;
-        exponent += 1;
-    }
-
-    let merged = (exponent << 52) | (significant & 0xFFFFFFFFFFFFFu64);
-    Some(f64::from_bits(merged))
 }
 
 impl TryFromMessage for AccountDelta {
@@ -553,30 +492,5 @@ impl TryFromMessage for BlockChanges {
         } else {
             Err(DecodeError::Empty)
         }
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use num_bigint::BigUint;
-    use rstest::rstest;
-
-    use super::*;
-
-    #[rstest]
-    #[case::one(BigUint::one(), 1.0f64)]
-    #[case::two(BigUint::from(2u64), 2.0f64)]
-    #[case::zero(BigUint::from(0u64), 0.0f64)]
-    #[case::two_pow190(BigUint::from(2u64).pow(190), 2.0f64.powi(190))]
-    #[case::max32(BigUint::from(u32::MAX as u64), u32::MAX as f64)]
-    #[case::max64(BigUint::from(u64::MAX), u64::MAX as f64)]
-    #[case::edge_54bits_trailing_zeros(BigUint::from(2u64.pow(53)), 2u64.pow(53) as f64)]
-    #[case::edge_54bits_trailing_ones(BigUint::from(2u64.pow(54) - 1), (2u64.pow(54) - 1) as f64)]
-    #[case::edge_53bits_trailing_zeros(BigUint::from(2u64.pow(52)), 2u64.pow(52) as f64)]
-    #[case::edge_53bits_trailing_ones(BigUint::from(2u64.pow(53) - 1), (2u64.pow(53) - 1) as f64)]
-    fn test_bytes_to_f64(#[case] inp: BigUint, #[case] out: f64) {
-        let bytes = inp.to_bytes_be();
-        let res = bytes_to_f64(&bytes).unwrap();
-        assert_eq!(res, out);
     }
 }
