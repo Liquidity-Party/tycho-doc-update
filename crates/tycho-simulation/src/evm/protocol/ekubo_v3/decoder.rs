@@ -32,26 +32,17 @@ use super::{
 };
 use crate::{
     evm::protocol::ekubo_v3::{
-        addresses::{
-            BOOSTED_FEES_CONCENTRATED_ADDRESS, MEV_CAPTURE_ADDRESS, ORACLE_ADDRESS, TWAMM_ADDRESS,
-        },
+        extension_type,
         pool::{
             boosted_fees::BoostedFeesPool, mev_capture::MevCapturePool, stableswap::StableswapPool,
         },
+        ExtensionType,
     },
     protocol::{
         errors::InvalidSnapshotError,
         models::{DecoderContext, TryFromWithBlock},
     },
 };
-
-pub enum ExtensionType {
-    NoSwapCallPoints,
-    Oracle,
-    Twamm,
-    MevCapture,
-    BoostedFees,
-}
 
 struct TimedStateDetails {
     rate_token0: u128,
@@ -283,22 +274,6 @@ fn extension_type_from_attributes_or_address(
     })
 }
 
-pub fn extension_type(extension: Address) -> Option<ExtensionType> {
-    Some(if has_no_swap_call_points(extension) {
-        ExtensionType::NoSwapCallPoints
-    } else if extension == ORACLE_ADDRESS {
-        ExtensionType::Oracle
-    } else if extension == TWAMM_ADDRESS {
-        ExtensionType::Twamm
-    } else if extension == MEV_CAPTURE_ADDRESS {
-        ExtensionType::MevCapture
-    } else if extension == BOOSTED_FEES_CONCENTRATED_ADDRESS {
-        ExtensionType::BoostedFees
-    } else {
-        return None;
-    })
-}
-
 fn attribute<'a>(
     map: &'a HashMap<String, Bytes>,
     key: &str,
@@ -348,12 +323,6 @@ fn timed_state_details(
         .sorted_unstable_by_key(|delta| delta.time)
         .collect(),
     })
-}
-
-fn has_no_swap_call_points(extension: Address) -> bool {
-    // Call points are encoded in the first byte of the extension address.
-    // Bit 6 == beforeSwap, bit 5 == afterSwap.
-    extension[0] & 0b0110_0000 == 0
 }
 
 #[cfg(test)]
