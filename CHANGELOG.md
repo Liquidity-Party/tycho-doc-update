@@ -1,3 +1,11 @@
+## [0.319.1](https://github.com/propeller-heads/tycho/compare/0.319.0...0.319.1) (2026-06-29)
+
+
+### Bug Fixes
+
+* **protobuf:** prevent usize underflow in bytes_to_f64 ([cf9bfdd](https://github.com/propeller-heads/tycho/commit/cf9bfdde2775cec95072c61c2a481334506ba094))
+* **protobuf:** prevent usize underflow in bytes_to_f64 ([#1133](https://github.com/propeller-heads/tycho/issues/1133)) ([9ef3e8b](https://github.com/propeller-heads/tycho/commit/9ef3e8bf7e798d222d68ee68e39dac2a6cb1166c))
+
 ## [0.319.0](https://github.com/propeller-heads/tycho/compare/0.318.1...0.319.0) (2026-06-29)
 
 
