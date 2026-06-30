@@ -1089,7 +1089,6 @@ where
         }
         Ok(())
     }
-
 }
 
 /// Generate a proxy token address for a given token index

@@ -668,8 +668,8 @@ impl ProtocolStreamBuilder {
     /// Installs override providers onto the decoder before the stream is built.
     ///
     /// Explicit consumer registrations win; the built-in default registry (see
-    /// [`default_override_providers`](crate::evm::override_stream::default_override_providers)) then
-    /// fills every remaining protocol it can serve.
+    /// [`default_override_providers`](crate::evm::override_stream::default_override_providers))
+    /// then fills every remaining protocol it can serve.
     fn install_override_providers(&mut self) {
         let explicit = std::mem::take(&mut self.override_providers);
         let covered: HashSet<String> = explicit.keys().cloned().collect();

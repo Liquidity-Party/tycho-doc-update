@@ -7,9 +7,11 @@
 //! block.
 //!
 //! This module defines the generic plumbing:
-//! - [`OverrideSnapshot`] — the resolved overrides for one protocol at a point in time.
-//! - [`StateOverrideProvider`] — a source that maintains a *live* [`watch`] channel of snapshots
-//!   per protocol (kept fresh in the background, e.g. from a WebSocket).
+//! - [`OverrideSnapshot`](crate::evm::override_stream::OverrideSnapshot) — the resolved overrides
+//!   for one protocol at a point in time.
+//! - [`StateOverrideProvider`](crate::evm::override_stream::StateOverrideProvider) — a source that
+//!   maintains a *live* [`watch`](tokio::sync::watch) channel of snapshots per protocol (kept fresh
+//!   in the background, e.g. from a WebSocket).
 //!
 //! Providers are registered per `protocol_system` (see
 //! [`ProtocolStreamBuilder::with_override_provider`](crate::evm::stream::ProtocolStreamBuilder::with_override_provider)).
@@ -17,7 +19,7 @@
 //! freshest snapshot at simulation time.
 //!
 //! It deliberately knows nothing about any specific venue or stream format; all such specifics live
-//! in the concrete provider implementations (see [`titan`]).
+//! in the concrete provider implementations (see [`titan`](crate::evm::override_stream::titan)).
 
 pub mod titan;
 
@@ -73,4 +75,3 @@ pub(crate) fn default_override_providers(
     providers.extend(titan::default_providers(registered_exchanges, covered));
     providers
 }
-

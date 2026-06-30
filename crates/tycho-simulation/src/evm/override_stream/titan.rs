@@ -72,7 +72,8 @@ pub fn default_providers(
     if needed.is_empty() {
         return HashMap::new();
     }
-    let provider: Arc<dyn StateOverrideProvider> = Arc::new(TitanProvider::spawn(TITAN_URL.to_string()));
+    let provider: Arc<dyn StateOverrideProvider> =
+        Arc::new(TitanProvider::spawn(TITAN_URL.to_string()));
     needed
         .into_iter()
         .map(|protocol| (protocol.to_string(), provider.clone()))
@@ -320,7 +321,9 @@ mod tests {
 
     #[test]
     fn parse_message_extracts_venue_state_diff() {
-        let venue = FERMISWAP_VENUE.parse::<Address>().unwrap();
+        let venue = FERMISWAP_VENUE
+            .parse::<Address>()
+            .unwrap();
         let snapshot = TitanProvider::parse_message(SAMPLE_MESSAGE, &venue)
             .expect("parse must succeed")
             .expect("venue is present");
@@ -336,12 +339,20 @@ mod tests {
         let value = "0x000000000000000000000000000000000000000000000000000000017e405801"
             .parse::<U256>()
             .unwrap();
-        assert_eq!(snapshot.storage.get(&account).and_then(|s| s.get(&slot)), Some(&value));
+        assert_eq!(
+            snapshot
+                .storage
+                .get(&account)
+                .and_then(|s| s.get(&slot)),
+            Some(&value)
+        );
     }
 
     #[test]
     fn parse_message_returns_none_for_absent_venue() {
-        let venue = KIPSELI_VENUE.parse::<Address>().unwrap();
+        let venue = KIPSELI_VENUE
+            .parse::<Address>()
+            .unwrap();
         assert!(TitanProvider::parse_message(SAMPLE_MESSAGE, &venue)
             .unwrap()
             .is_none());
@@ -349,7 +360,9 @@ mod tests {
 
     #[test]
     fn max_lane_timestamp_picks_newest_plausible_top_word() {
-        let addr = FERMISWAP_VENUE.parse::<Address>().unwrap();
+        let addr = FERMISWAP_VENUE
+            .parse::<Address>()
+            .unwrap();
         // Two lane slots with the timestamp packed in the top 4 bytes, plus a non-lane slot
         // whose top bytes are zero (must be ignored).
         let older = U256::from(1_700_000_000u64) << 224;
@@ -368,8 +381,11 @@ mod tests {
 
     #[test]
     fn max_lane_timestamp_none_when_no_plausible_values() {
-        let addr = FERMISWAP_VENUE.parse::<Address>().unwrap();
-        let overrides = HashMap::from([(addr, HashMap::from([(U256::from(0u64), U256::from(7u64))]))]);
+        let addr = FERMISWAP_VENUE
+            .parse::<Address>()
+            .unwrap();
+        let overrides =
+            HashMap::from([(addr, HashMap::from([(U256::from(0u64), U256::from(7u64))]))]);
         assert!(TitanProvider::max_lane_timestamp(&overrides).is_none());
     }
 }
