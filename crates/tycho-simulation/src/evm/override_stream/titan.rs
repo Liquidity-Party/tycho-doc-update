@@ -18,9 +18,12 @@ use std::{
 use alloy::primitives::{Address, U256};
 use futures::StreamExt;
 use serde_json::Value;
-use tokio::{sync::watch, time::sleep};
+use tokio::{
+    sync::watch,
+    time::{sleep, timeout},
+};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 use super::{OverrideSnapshot, StateOverrideProvider};
 
@@ -43,6 +46,14 @@ const FERMISWAP_VENUE: &str = "0xb1076fe3ab5e28005c7c323bac5ac06a680d452e";
 const KIPSELI_VENUE: &str = "0x5cdbe59400cc2efdcc2b54acca4a99fe00dd588c";
 /// bopAMM pAMM venue address on Titan's quote stream.
 const BOPAMM_VENUE: &str = "0x160141a205f5ddcf096ba3f48b7ed21eb52c62ea";
+
+/// Longest gap between Titan messages tolerated before the socket is treated as dead and
+/// re-established. Titan pushes several updates per second, so a multi-second silence means a
+/// stalled or half-open connection that [`StreamExt::next`] would otherwise wait on forever.
+const READ_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Reconnect backoff is `2^min(attempt, MAX_BACKOFF_EXP)` seconds, i.e. capped at 32s.
+const MAX_BACKOFF_EXP: u32 = 5;
 
 /// Returns the pAMM `protocol_system`s this provider knows how to serve.
 fn known_pamm_protocols() -> &'static [&'static str] {
@@ -110,50 +121,98 @@ impl TitanProvider {
         Self { receivers }
     }
 
-    /// Maintains the Titan WebSocket connection forever: parses each message into a per-venue
-    /// [`OverrideSnapshot`] and publishes it on the matching channel, reconnecting with capped
-    /// exponential backoff on any disconnect or error.
+    /// Maintains the Titan WebSocket connection for the lifetime of the process.
+    ///
+    /// Connects, reads messages, and publishes each parsed [`OverrideSnapshot`] on the matching
+    /// venue channel. Any disconnect, read error, server-side close, or idle timeout drops back to
+    /// the reconnect loop, which retries forever with capped exponential backoff. The backoff is
+    /// reset only after a message is actually received, so a socket that connects and immediately
+    /// drops still backs off instead of busy-looping. This task never returns and never panics:
+    /// every failure mode is logged and retried.
     async fn run(url: String, senders: Vec<(Address, watch::Sender<OverrideSnapshot>)>) {
         let mut attempt: u32 = 0;
         loop {
             match connect_async(url.as_str()).await {
                 Ok((mut ws_stream, _)) => {
                     info!(%url, "Connected to Titan pAMM quote stream");
-                    attempt = 0;
-                    while let Some(message) = ws_stream.next().await {
+                    loop {
+                        // Bound the wait so a half-open connection (no data and no close frame) is
+                        // detected and retried instead of blocking on `next()` indefinitely.
+                        let message = match timeout(READ_IDLE_TIMEOUT, ws_stream.next()).await {
+                            Ok(Some(message)) => message,
+                            // Stream ended: the server hung up without sending a close frame.
+                            Ok(None) => {
+                                warn!("Titan quote stream ended; reconnecting");
+                                break;
+                            }
+                            // No traffic within the idle window: assume a stalled socket.
+                            Err(_elapsed) => {
+                                warn!(
+                                    idle_secs = READ_IDLE_TIMEOUT.as_secs(),
+                                    "No Titan message within idle timeout; reconnecting"
+                                );
+                                break;
+                            }
+                        };
+
                         match message {
+                            // Expected case: a JSON quote-stream frame. Parse it once per venue and
+                            // publish any resolved snapshot. Receiving a frame proves the
+                            // connection is healthy, so reset the reconnect backoff.
                             Ok(Message::Text(text)) => {
+                                attempt = 0;
                                 for (venue, sender) in &senders {
                                     match Self::parse_message(text.as_str(), venue) {
                                         Ok(Some(snapshot)) => {
+                                            // A send error here only means every receiver (the
+                                            // provider handle and all pools) has been dropped, i.e.
+                                            // nothing consumes overrides anymore; safe to ignore.
                                             let _ = sender.send(snapshot);
                                         }
+                                        // Venue not present in this message — nothing to update.
                                         Ok(None) => {}
+                                        // Malformed payload for this venue: keep the connection and
+                                        // the last good snapshot, but surface the problem.
                                         Err(e) => {
                                             warn!(%venue, error = %e, "Failed to parse Titan message");
                                         }
                                     }
                                 }
                             }
-                            Ok(Message::Close(_)) => {
-                                info!("Titan quote stream closed by server");
+                            // Titan only sends JSON text; a binary frame is unexpected. Skip it and
+                            // keep the (otherwise healthy) connection rather than reconnecting.
+                            Ok(Message::Binary(bytes)) => {
+                                warn!(len = bytes.len(), "Ignoring unexpected binary Titan frame");
+                            }
+                            // Keep-alive frames. tokio-tungstenite answers pings with pongs
+                            // automatically while the stream is polled, so there is nothing to do.
+                            Ok(Message::Ping(_)) | Ok(Message::Pong(_)) => {}
+                            // Raw frames only surface with non-default tungstenite settings;
+                            // ignore.
+                            Ok(Message::Frame(_)) => {}
+                            // Server initiated a graceful close — reconnect.
+                            Ok(Message::Close(frame)) => {
+                                warn!(?frame, "Titan quote stream closed by server; reconnecting");
                                 break;
                             }
-                            Ok(_) => {}
+                            // Transport/protocol error (broken pipe, invalid frame, ...) —
+                            // reconnect.
                             Err(e) => {
-                                error!(error = %e, "Titan quote stream read error");
+                                warn!(error = %e, "Titan quote stream read error; reconnecting");
                                 break;
                             }
                         }
                     }
                 }
+                // Could not establish the connection at all — fall through to backoff and retry.
                 Err(e) => {
-                    error!(error = %e, "Failed to connect to Titan quote stream");
+                    warn!(error = %e, "Failed to connect to Titan quote stream; retrying");
                 }
             }
+
             attempt = attempt.saturating_add(1);
-            let backoff = Duration::from_secs(2u64.pow(attempt.min(5)));
-            warn!(seconds = backoff.as_secs(), attempt, "Reconnecting to Titan quote stream");
+            let backoff = Duration::from_secs(2u64.pow(attempt.min(MAX_BACKOFF_EXP)));
+            warn!(seconds = backoff.as_secs(), attempt, "Backing off before reconnecting to Titan");
             sleep(backoff).await;
         }
     }
