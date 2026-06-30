@@ -1,3 +1,18 @@
+## [0.319.3](https://github.com/propeller-heads/tycho/compare/0.319.2...0.319.3) (2026-06-30)
+
+
+### Bug Fixes
+
+* add FermiSwap allowance DCI entrypoints ([00ed46b](https://github.com/propeller-heads/tycho/commit/00ed46b965e188c82e80503fd42bca882a1c9632))
+* revert self-contained token proxy isolation ([9708816](https://github.com/propeller-heads/tycho/commit/9708816874deed352e9751f6558f8b2a694b93fd))
+* **simulation:** cap Metric get_limits to depth and clarify exhaustion error ([3667efc](https://github.com/propeller-heads/tycho/commit/3667efc978a8d53c35a8915fd8a3a2dd0d79342f))
+* **simulation:** cap Metric get_limits to depth and return exact cap ([#1135](https://github.com/propeller-heads/tycho/issues/1135)) ([4609c7d](https://github.com/propeller-heads/tycho/commit/4609c7d18ae1f868656822a4ffaee789b916be84))
+* **simulation:** cover self-contained token proxy isolation ([bab1954](https://github.com/propeller-heads/tycho/commit/bab19549f15739294062ca2d443ef555cf205057))
+* **simulation:** isolate self-contained token proxies in shared DB ([3b85ab1](https://github.com/propeller-heads/tycho/commit/3b85ab155210b2b33113c100753c292107b276d5))
+* **simulation:** resolve self-contained token transfers locally ([dab201d](https://github.com/propeller-heads/tycho/commit/dab201d0dd9860afbf890585a0e38b8b134c8f40))
+* **simulation:** resolve self-contained token transfers locally ([#1118](https://github.com/propeller-heads/tycho/issues/1118)) ([54499f4](https://github.com/propeller-heads/tycho/commit/54499f41eedd34347b23827980b8844d6d9ae84e))
+* **simulation:** return exact Metric cap instead of f64 round-trip ([54d0b47](https://github.com/propeller-heads/tycho/commit/54d0b47722485217cab93d4af85a038d867fab53))
+
 ## [0.319.2](https://github.com/propeller-heads/tycho/compare/0.319.1...0.319.2) (2026-06-30)
 
 
