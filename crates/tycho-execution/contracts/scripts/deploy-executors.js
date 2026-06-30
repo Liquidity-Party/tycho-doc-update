@@ -28,6 +28,7 @@ const deploy_protocols = {
         "native_wrapper",
         "rfq:liquorice",
         "vm:fermiswap",
+        "vm:bopamm",
     ],
     "base": [
         "uniswap_v2",
