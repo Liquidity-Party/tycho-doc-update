@@ -11,6 +11,7 @@ use itertools::Itertools;
 use num_bigint::BigUint;
 use revm::DatabaseRef;
 use serde::{Deserialize, Serialize};
+use tokio::sync::watch;
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::token::Token,
@@ -29,6 +30,7 @@ use super::{
 };
 use crate::evm::{
     engine_db::{engine_db_interface::EngineDatabaseInterface, tycho_db::PreCachedDB},
+    override_stream::OverrideSnapshot,
     protocol::{
         u256_num::{u256_to_biguint, u256_to_f64},
         utils::bytes_to_address,
@@ -82,6 +84,13 @@ where
     self_contained_tokens: HashSet<Address>,
     /// Block context overrides applied to this pool's adapter simulations.
     block_overrides: Option<BlockEnvOverrides>,
+    /// Live per-block VM overrides (e.g. Titan pAMM oracle prices) read at simulation time.
+    ///
+    /// When set, the latest [`OverrideSnapshot`] is merged into the pool's storage overwrites and
+    /// block environment on every simulation, so sub-block updates are reflected without a Tycho
+    /// block update. Takes precedence over [`Self::block_lasting_overwrites`] and
+    /// [`Self::block_overrides`] on conflict.
+    live_overrides: Option<watch::Receiver<OverrideSnapshot>>,
 }
 
 impl<D> Debug for EVMPoolState<D>
@@ -143,7 +152,46 @@ where
             disable_overwrite_tokens,
             self_contained_tokens,
             block_overrides,
+            live_overrides: None,
         }
+    }
+
+    /// Attaches a live override channel (e.g. from a Titan pAMM provider).
+    ///
+    /// Once set, the latest snapshot is read on every simulation; see [`Self::live_overrides`].
+    pub fn set_live_overrides(&mut self, receiver: watch::Receiver<OverrideSnapshot>) {
+        self.live_overrides = Some(receiver);
+    }
+
+    /// Storage overwrites from the live override channel, if one is attached and has data.
+    fn live_storage_overwrites(&self) -> Option<HashMap<Address, Overwrites>> {
+        let snapshot = self.live_overrides.as_ref()?.borrow();
+        if snapshot.storage.is_empty() {
+            None
+        } else {
+            Some(snapshot.storage.clone())
+        }
+    }
+
+    /// The block environment to apply to adapter simulations, preferring the live snapshot's
+    /// resolved block number/timestamp over the statically configured [`Self::block_overrides`].
+    fn effective_block_overrides(&self) -> Option<BlockEnvOverrides> {
+        let base = self.block_overrides.to_owned();
+        let Some(receiver) = self.live_overrides.as_ref() else {
+            return base;
+        };
+        let snapshot = receiver.borrow();
+        if snapshot.block_number.is_none() && snapshot.block_timestamp.is_none() {
+            return base;
+        }
+        let mut overrides = base.unwrap_or_default();
+        if snapshot.block_number.is_some() {
+            overrides.number = snapshot.block_number;
+        }
+        if snapshot.block_timestamp.is_some() {
+            overrides.timestamp = snapshot.block_timestamp;
+        }
+        Some(overrides)
     }
 
     /// Ensures the pool supports the given capability
@@ -230,7 +278,7 @@ where
                         buy_token_address,
                         vec![sell_amount_limit / U256::from(100)],
                         overwrites,
-                        self.block_overrides.clone(),
+                        self.effective_block_overrides(),
                     )?;
 
                     let price = if self
@@ -290,7 +338,7 @@ where
                             false,
                             x1,
                             overwrites.clone(),
-                            self.block_overrides.clone(),
+                            self.effective_block_overrides(),
                         )?
                         .0
                         .received_amount;
@@ -306,7 +354,7 @@ where
                             false,
                             x2,
                             overwrites,
-                            self.block_overrides.clone(),
+                            self.effective_block_overrides(),
                         )?
                         .0
                         .received_amount;
@@ -381,7 +429,7 @@ where
             tokens[0],
             tokens[1],
             overwrites,
-            self.block_overrides.clone(),
+            self.effective_block_overrides(),
         )?;
 
         Ok(limits)
@@ -466,8 +514,13 @@ where
         let token_overwrites = self.get_token_overwrites(tokens, max_amount)?;
 
         // Merge `block_lasting_overwrites` with `token_overwrites`
-        let merged_overwrites =
+        let mut merged_overwrites =
             self.merge(&self.block_lasting_overwrites.clone(), &token_overwrites);
+
+        // Live overrides (e.g. Titan pAMM oracle state) take precedence on conflict.
+        if let Some(live_overwrites) = self.live_storage_overwrites() {
+            merged_overwrites = self.merge(&merged_overwrites, &live_overwrites);
+        }
 
         Ok(merged_overwrites)
     }
@@ -625,7 +678,7 @@ where
 
     #[cfg(test)]
     pub fn get_block_overrides(&self) -> Option<BlockEnvOverrides> {
-        self.block_overrides.clone()
+        self.effective_block_overrides()
     }
 }
 
@@ -717,7 +770,7 @@ where
             false,
             sell_amount_respecting_limit,
             Some(complete_overwrites),
-            self.block_overrides.clone(),
+            self.effective_block_overrides(),
         )?;
 
         let mut new_state = self.clone();
