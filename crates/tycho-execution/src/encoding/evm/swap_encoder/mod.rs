@@ -14,6 +14,7 @@ mod liquidity_party;
 mod liquorice;
 mod lunarbase;
 mod maverick_v2;
+mod metric;
 mod native_wrap;
 mod rocketpool;
 mod slipstreams;

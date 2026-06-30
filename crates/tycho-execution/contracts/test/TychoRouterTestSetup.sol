@@ -27,6 +27,7 @@ import {ERC4626Executor} from "../src/executors/ERC4626Executor.sol";
 import {NativeWrapExecutor} from "../src/executors/NativeWrapExecutor.sol";
 import {LiquoriceExecutor} from "../src/executors/LiquoriceExecutor.sol";
 import {AerodromeV1Executor} from "../src/executors/AerodromeV1Executor.sol";
+import {MetricExecutor} from "../src/executors/MetricExecutor.sol";
 // Test utilities and mocks
 import "./Constants.sol";
 import "./TestUtils.sol";
@@ -123,6 +124,7 @@ contract TychoRouterTestSetup is
     LiquoriceExecutor public liquoriceExecutor;
     AerodromeV1Executor public aerodromeV1Executor;
     FermiSwapExecutor public fermiSwapExecutor;
+    MetricExecutor public metricExecutor;
 
     FeeCalculator feeCalculator;
     address routerFeeReceiver;
@@ -241,8 +243,9 @@ contract TychoRouterTestSetup is
         liquidityPartyExecutor = new LiquidityPartyExecutor();
         aerodromeV1Executor = new AerodromeV1Executor();
         fermiSwapExecutor = new FermiSwapExecutor(FERMI_SWAPPER);
+        metricExecutor = new MetricExecutor(METRIC_ORACLE);
 
-        address[] memory executors = new address[](22);
+        address[] memory executors = new address[](23);
         executors[0] = address(usv2Executor);
         executors[1] = address(usv3Executor);
         executors[2] = address(pancakev3Executor);
@@ -265,6 +268,7 @@ contract TychoRouterTestSetup is
         executors[19] = address(liquidityPartyExecutor);
         executors[20] = address(aerodromeV1Executor);
         executors[21] = address(fermiSwapExecutor);
+        executors[22] = address(metricExecutor);
         return executors;
     }
 
