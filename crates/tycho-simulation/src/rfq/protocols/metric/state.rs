@@ -205,11 +205,20 @@ impl ProtocolSim for MetricState {
             new_state: self.clone_box(),
         };
 
-        if exhausted || amount_out > effective_max_output {
+        if amount_out > effective_max_output {
             return Err(SimulationError::InvalidInput(
                 format!(
-                    "Metric pool has not enough liquidity. Requested output {}, available {}",
-                    amount_out, effective_max_output
+                    "Metric pool has not enough liquidity. Requested output {amount_out} exceeds \
+                     available {effective_max_output}"
+                ),
+                Some(res),
+            ));
+        }
+        if exhausted {
+            return Err(SimulationError::InvalidInput(
+                format!(
+                    "Metric pool depth exhausted. Input {amount_in} cannot be fully filled; \
+                     tradable depth caps output at {effective_max_output}"
                 ),
                 Some(res),
             ));
@@ -227,7 +236,11 @@ impl ProtocolSim for MetricState {
         match direction {
             MetricDirection::ZeroForOne => {
                 let price = self.bid_ask.bid_price()?;
-                let buy_limit = self.bid_ask.total_token1_available()?;
+                // Mirror get_amount_out: the tradable output is capped by the published depth,
+                // not just aggregate inventory. Reporting the aggregate would advertise a limit
+                // that get_amount_out then rejects as depth-exhausted.
+                let buy_limit =
+                    cap_to_depth(self.bid_ask.total_token1_available()?, &self.bid_ask.depth.bids)?;
                 let buy_limit_human = buy_limit.to_f64().ok_or_else(|| {
                     SimulationError::RecoverableError("Can't convert buy limit to f64".into())
                 })? / 10_f64.powi(self.quote_token.decimals as i32);
@@ -243,7 +256,11 @@ impl ProtocolSim for MetricState {
             }
             MetricDirection::OneForZero => {
                 let price = self.bid_ask.ask_price()?;
-                let buy_limit = self.bid_ask.total_token0_available()?;
+                // Mirror get_amount_out: the tradable output is capped by the published depth,
+                // not just aggregate inventory. Reporting the aggregate would advertise a limit
+                // that get_amount_out then rejects as depth-exhausted.
+                let buy_limit =
+                    cap_to_depth(self.bid_ask.total_token0_available()?, &self.bid_ask.depth.asks)?;
                 let buy_limit_human = buy_limit.to_f64().ok_or_else(|| {
                     SimulationError::RecoverableError("Can't convert buy limit to f64".into())
                 })? / 10_f64.powi(self.base_token.decimals as i32);
@@ -310,6 +327,18 @@ fn depth_max_output(bins: &[MetricDepthBin]) -> Result<Option<BigUint>, Simulati
                 .map_err(SimulationError::from)
         })
         .transpose()
+}
+
+/// Caps an aggregate-inventory output limit by the published depth, when present.
+///
+/// Returns the smaller of `aggregate` and the cumulative depth volume so the reported limit
+/// never exceeds what a depth walk can actually fill. Pools that expose no depth bins fall back
+/// to `aggregate`.
+fn cap_to_depth(aggregate: BigUint, bins: &[MetricDepthBin]) -> Result<BigUint, SimulationError> {
+    match depth_max_output(bins)? {
+        Some(depth) => Ok(depth.min(aggregate)),
+        None => Ok(aggregate),
+    }
 }
 
 fn depth_output_for_input(
@@ -654,6 +683,67 @@ mod tests {
             .unwrap_err();
 
         assert!(matches!(err, SimulationError::InvalidInput(_, Some(_))));
+    }
+
+    #[test]
+    fn test_get_amount_out_depth_exhausted_reports_depth_message() {
+        let mut state = state();
+        state.bid_ask.depth.bids = vec![MetricDepthBin {
+            bin_idx: 0,
+            // 2900 * 2^64
+            price: "53495557813757699686400".to_string(),
+            // Only 3000 USDC of depth, far less than the 30000 USDC aggregate inventory.
+            cumulative_volume: "3000000000".to_string(),
+        }];
+
+        let err = state
+            .get_amount_out(
+                // 2 WETH buys more output than the depth can fill.
+                BigUint::from(2_000_000_000_000_000_000u128),
+                &state.base_token,
+                &state.quote_token,
+            )
+            .unwrap_err();
+
+        match err {
+            SimulationError::InvalidInput(msg, Some(_)) => {
+                assert!(msg.contains("depth exhausted"), "unexpected message: {msg}");
+            }
+            other => panic!("expected InvalidInput, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_get_limits_caps_to_depth() {
+        let mut state = state();
+        state.bid_ask.depth.bids = vec![MetricDepthBin {
+            bin_idx: 0,
+            // 2900 * 2^64
+            price: "53495557813757699686400".to_string(),
+            // 1500 USDC of depth, below the 30000 USDC aggregate inventory.
+            cumulative_volume: "1500000000".to_string(),
+        }];
+
+        let (sell_limit, buy_limit) = state
+            .get_limits(state.base_token.address.clone(), state.quote_token.address.clone())
+            .unwrap();
+
+        // Output limit follows the depth, not the aggregate inventory.
+        assert_eq!(buy_limit, BigUint::from(1_500_000_000u64));
+        // Input limit derived from the depth-capped output at the top-of-book bid (3000).
+        assert_eq!(sell_limit, BigUint::from(500_000_000_000_000_000u128));
+    }
+
+    #[test]
+    fn test_get_limits_uses_aggregate_without_depth() {
+        let state = state();
+
+        let (_, buy_limit) = state
+            .get_limits(state.base_token.address.clone(), state.quote_token.address.clone())
+            .unwrap();
+
+        // No depth bins: fall back to aggregate inventory (30000 USDC).
+        assert_eq!(buy_limit, BigUint::from(30_000_000_000u64));
     }
 
     #[test]
