@@ -1,3 +1,34 @@
+## [0.320.0](https://github.com/propeller-heads/tycho/compare/0.319.3...0.320.0) (2026-06-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* **substreams:** make bopamm component ids simulation-compatible
+
+### Features
+
+* **adapter-integration:** add BopAMM swap adapter ([cda4568](https://github.com/propeller-heads/tycho/commit/cda45689b3e433f9529ea19b3de3593f1dfe783c))
+* BopAMM (Bebop PMM) integration — indexing, simulation, execution ([#1095](https://github.com/propeller-heads/tycho/issues/1095)) ([10b902a](https://github.com/propeller-heads/tycho/commit/10b902aad7adbe66d7f37761f749b42401b8d23d))
+* **substreams:** add BopAMM VM integration ([64580d1](https://github.com/propeller-heads/tycho/commit/64580d1332bf7b4a9e134225a0bf57d07fd8b336))
+* **substreams:** emit self_contained_tokens for BopAMM (ENG-6161) ([a2af5c4](https://github.com/propeller-heads/tycho/commit/a2af5c478efad669d4507c4bb99a262e402946fb)), closes [#1118](https://github.com/propeller-heads/tycho/issues/1118) [#1118](https://github.com/propeller-heads/tycho/issues/1118) [#1118](https://github.com/propeller-heads/tycho/issues/1118)
+* **substreams:** make bopamm component ids simulation-compatible ([6065ce3](https://github.com/propeller-heads/tycho/commit/6065ce3e54a7a4cc63ead3409440348005542e19))
+* **substreams:** seed and maintain bopamm maker balances accurately (PR review 7,8) ([2867045](https://github.com/propeller-heads/tycho/commit/2867045bee7556c34b033b159f1c1afb5947f728))
+* **tycho-execution:** add BopAMM executor and swap encoder ([5210b4a](https://github.com/propeller-heads/tycho/commit/5210b4a459d06049471211bad153e3edc2556ef1))
+* **tycho-simulation:** register BopAMM VM swap adapter ([fe0b81d](https://github.com/propeller-heads/tycho/commit/fe0b81db6ce62cdc4fb35009500c009efbcbe692))
+
+
+### Bug Fixes
+
+* **adapter:** derive BopAMM swap amount from quote() ([ca1400e](https://github.com/propeller-heads/tycho/commit/ca1400e6993bbb414c66c8c48e31b4ef54cec4a6))
+* **adapter:** resolve bopamm pricing/usdc lazily and pin test fork ([1cb7e87](https://github.com/propeller-heads/tycho/commit/1cb7e873c45a92dbdc3ddc6c51f0c485c85035e0))
+* **substreams:** attribute registry commits to the BopAMM module only ([7da5582](https://github.com/propeller-heads/tycho/commit/7da558255bb1ef634a8a18337f358ca63286714f))
+* **tycho-execution:** correct BopAMM test executor address after metric merge ([4b81183](https://github.com/propeller-heads/tycho/commit/4b81183d9de9a2edee2643cf7a86b250ef2d3b8a))
+
+
+### Performance Improvements
+
+* **substreams:** build bopamm asset-config slot map lazily (PR review) ([e86f0cd](https://github.com/propeller-heads/tycho/commit/e86f0cde24016031c5a2153c674b4392b5850b55))
+
 ## [0.319.3](https://github.com/propeller-heads/tycho/compare/0.319.2...0.319.3) (2026-06-30)
 
 
