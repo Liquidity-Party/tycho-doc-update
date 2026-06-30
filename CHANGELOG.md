@@ -1,3 +1,11 @@
+## [0.319.2](https://github.com/propeller-heads/tycho/compare/0.319.1...0.319.2) (2026-06-30)
+
+
+### Bug Fixes
+
+* pin nightly version to work around rustc ICE ([d9624ea](https://github.com/propeller-heads/tycho/commit/d9624ea481141b59a4f864e50a1984ab244e9ed1))
+* pin nightly version to work around rustc ICE ([#1137](https://github.com/propeller-heads/tycho/issues/1137)) ([3f3d9ea](https://github.com/propeller-heads/tycho/commit/3f3d9eabc5d96e943a88ac949ce23a04893e7191))
+
 ## [0.319.1](https://github.com/propeller-heads/tycho/compare/0.319.0...0.319.1) (2026-06-29)
 
 
