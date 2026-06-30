@@ -196,9 +196,17 @@ impl ProtocolSim for MetricState {
                 .ok_or_else(|| {
                     SimulationError::RecoverableError("Can't convert amount out to BigUint".into())
                 })?;
-        let capped_amount = amount_out
-            .clone()
-            .min(effective_max_output.clone());
+        // When the trade is capped by available depth/inventory, the exact answer is the BigUint
+        // cap itself. Reconstructing it from the f64 human amount loses precision — an 18-decimal
+        // cap can drift by a few wei through the f64 round-trip — so return the cap directly and
+        // only fall back to the f64 result for genuine partial fills.
+        let capped_amount = if exhausted {
+            effective_max_output.clone()
+        } else {
+            amount_out
+                .clone()
+                .min(effective_max_output.clone())
+        };
         let res = GetAmountOutResult {
             amount: capped_amount.clone(),
             gas: BigUint::from(170_000u64),
@@ -708,6 +716,38 @@ mod tests {
         match err {
             SimulationError::InvalidInput(msg, Some(_)) => {
                 assert!(msg.contains("depth exhausted"), "unexpected message: {msg}");
+            }
+            other => panic!("expected InvalidInput, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_get_amount_out_exhausted_returns_exact_cap() {
+        let mut state = state();
+        // An 18-decimal cap above 2^53 that is NOT representable exactly as f64. This is the
+        // value from the production log; the f64 round-trip would drift it to ...662912.
+        let cap = "6575581573690662958";
+        state.bid_ask.depth.asks = vec![MetricDepthBin {
+            bin_idx: 0,
+            // 3100 * 2^64
+            price: "57184906628499610009600".to_string(),
+            cumulative_volume: cap.to_string(),
+        }];
+
+        let err = state
+            .get_amount_out(
+                // 30000 USDC buys more WETH than the depth can fill.
+                BigUint::from(30_000_000_000u64),
+                &state.quote_token,
+                &state.base_token,
+            )
+            .unwrap_err();
+
+        match err {
+            SimulationError::InvalidInput(msg, Some(res)) => {
+                assert!(msg.contains("depth exhausted"), "unexpected message: {msg}");
+                // Exact cap, not the f64-reconstructed 6575581573690662912.
+                assert_eq!(res.amount, BigUint::from_str(cap).unwrap());
             }
             other => panic!("expected InvalidInput, got {other:?}"),
         }
