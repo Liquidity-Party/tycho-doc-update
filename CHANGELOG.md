@@ -1,3 +1,57 @@
+## [0.320.0](https://github.com/propeller-heads/tycho/compare/0.319.3...0.320.0) (2026-06-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* **substreams:** make bopamm component ids simulation-compatible
+
+### Features
+
+* **adapter-integration:** add BopAMM swap adapter ([cda4568](https://github.com/propeller-heads/tycho/commit/cda45689b3e433f9529ea19b3de3593f1dfe783c))
+* BopAMM (Bebop PMM) integration — indexing, simulation, execution ([#1095](https://github.com/propeller-heads/tycho/issues/1095)) ([10b902a](https://github.com/propeller-heads/tycho/commit/10b902aad7adbe66d7f37761f749b42401b8d23d))
+* **substreams:** add BopAMM VM integration ([64580d1](https://github.com/propeller-heads/tycho/commit/64580d1332bf7b4a9e134225a0bf57d07fd8b336))
+* **substreams:** emit self_contained_tokens for BopAMM (ENG-6161) ([a2af5c4](https://github.com/propeller-heads/tycho/commit/a2af5c478efad669d4507c4bb99a262e402946fb)), closes [#1118](https://github.com/propeller-heads/tycho/issues/1118) [#1118](https://github.com/propeller-heads/tycho/issues/1118) [#1118](https://github.com/propeller-heads/tycho/issues/1118)
+* **substreams:** make bopamm component ids simulation-compatible ([6065ce3](https://github.com/propeller-heads/tycho/commit/6065ce3e54a7a4cc63ead3409440348005542e19))
+* **substreams:** seed and maintain bopamm maker balances accurately (PR review 7,8) ([2867045](https://github.com/propeller-heads/tycho/commit/2867045bee7556c34b033b159f1c1afb5947f728))
+* **tycho-execution:** add BopAMM executor and swap encoder ([5210b4a](https://github.com/propeller-heads/tycho/commit/5210b4a459d06049471211bad153e3edc2556ef1))
+* **tycho-simulation:** register BopAMM VM swap adapter ([fe0b81d](https://github.com/propeller-heads/tycho/commit/fe0b81db6ce62cdc4fb35009500c009efbcbe692))
+
+
+### Bug Fixes
+
+* **adapter:** derive BopAMM swap amount from quote() ([ca1400e](https://github.com/propeller-heads/tycho/commit/ca1400e6993bbb414c66c8c48e31b4ef54cec4a6))
+* **adapter:** resolve bopamm pricing/usdc lazily and pin test fork ([1cb7e87](https://github.com/propeller-heads/tycho/commit/1cb7e873c45a92dbdc3ddc6c51f0c485c85035e0))
+* **substreams:** attribute registry commits to the BopAMM module only ([7da5582](https://github.com/propeller-heads/tycho/commit/7da558255bb1ef634a8a18337f358ca63286714f))
+* **tycho-execution:** correct BopAMM test executor address after metric merge ([4b81183](https://github.com/propeller-heads/tycho/commit/4b81183d9de9a2edee2643cf7a86b250ef2d3b8a))
+
+
+### Performance Improvements
+
+* **substreams:** build bopamm asset-config slot map lazily (PR review) ([e86f0cd](https://github.com/propeller-heads/tycho/commit/e86f0cde24016031c5a2153c674b4392b5850b55))
+
+## [0.319.3](https://github.com/propeller-heads/tycho/compare/0.319.2...0.319.3) (2026-06-30)
+
+
+### Bug Fixes
+
+* add FermiSwap allowance DCI entrypoints ([00ed46b](https://github.com/propeller-heads/tycho/commit/00ed46b965e188c82e80503fd42bca882a1c9632))
+* revert self-contained token proxy isolation ([9708816](https://github.com/propeller-heads/tycho/commit/9708816874deed352e9751f6558f8b2a694b93fd))
+* **simulation:** cap Metric get_limits to depth and clarify exhaustion error ([3667efc](https://github.com/propeller-heads/tycho/commit/3667efc978a8d53c35a8915fd8a3a2dd0d79342f))
+* **simulation:** cap Metric get_limits to depth and return exact cap ([#1135](https://github.com/propeller-heads/tycho/issues/1135)) ([4609c7d](https://github.com/propeller-heads/tycho/commit/4609c7d18ae1f868656822a4ffaee789b916be84))
+* **simulation:** cover self-contained token proxy isolation ([bab1954](https://github.com/propeller-heads/tycho/commit/bab19549f15739294062ca2d443ef555cf205057))
+* **simulation:** isolate self-contained token proxies in shared DB ([3b85ab1](https://github.com/propeller-heads/tycho/commit/3b85ab155210b2b33113c100753c292107b276d5))
+* **simulation:** resolve self-contained token transfers locally ([dab201d](https://github.com/propeller-heads/tycho/commit/dab201d0dd9860afbf890585a0e38b8b134c8f40))
+* **simulation:** resolve self-contained token transfers locally ([#1118](https://github.com/propeller-heads/tycho/issues/1118)) ([54499f4](https://github.com/propeller-heads/tycho/commit/54499f41eedd34347b23827980b8844d6d9ae84e))
+* **simulation:** return exact Metric cap instead of f64 round-trip ([54d0b47](https://github.com/propeller-heads/tycho/commit/54d0b47722485217cab93d4af85a038d867fab53))
+
+## [0.319.2](https://github.com/propeller-heads/tycho/compare/0.319.1...0.319.2) (2026-06-30)
+
+
+### Bug Fixes
+
+* pin nightly version to work around rustc ICE ([d9624ea](https://github.com/propeller-heads/tycho/commit/d9624ea481141b59a4f864e50a1984ab244e9ed1))
+* pin nightly version to work around rustc ICE ([#1137](https://github.com/propeller-heads/tycho/issues/1137)) ([3f3d9ea](https://github.com/propeller-heads/tycho/commit/3f3d9eabc5d96e943a88ac949ce23a04893e7191))
+
 ## [0.319.1](https://github.com/propeller-heads/tycho/compare/0.319.0...0.319.1) (2026-06-29)
 
 
