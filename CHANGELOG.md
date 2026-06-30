@@ -1,3 +1,11 @@
+## [0.320.1](https://github.com/propeller-heads/tycho/compare/0.320.0...0.320.1) (2026-06-30)
+
+
+### Bug Fixes
+
+* handle LunarBase zero quotes and marginal spot price ([768eb8c](https://github.com/propeller-heads/tycho/commit/768eb8c82028c50939b3b068c806e13ac30bcc4c))
+* handle LunarBase zero quotes and marginal spot price ([#1136](https://github.com/propeller-heads/tycho/issues/1136)) ([f385412](https://github.com/propeller-heads/tycho/commit/f385412f601afbf61863db0d241d23862af22b46))
+
 ## [0.320.0](https://github.com/propeller-heads/tycho/compare/0.319.3...0.320.0) (2026-06-30)
 
 
