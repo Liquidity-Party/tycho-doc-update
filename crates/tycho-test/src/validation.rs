@@ -207,10 +207,12 @@ pub async fn batch_validate_components(
         // All calls in the batch share one block_id against one backend, so a lagging node fails
         // them all with "block not found". Retry the whole batch — a fresh client each attempt may
         // hit an already-synced backend — rather than recording spurious validation failures.
-        let block_lagging = results.iter().any(|result| match result {
-            Err(e) => crate::is_block_not_found(&e.to_string()),
-            Ok(_) => false,
-        });
+        let block_lagging = results
+            .iter()
+            .any(|result| match result {
+                Err(e) => crate::is_block_not_found(&e.to_string()),
+                Ok(_) => false,
+            });
 
         if !block_lagging || attempt >= BLOCK_NOT_FOUND_MAX_RETRIES {
             return results;
