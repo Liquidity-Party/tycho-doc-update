@@ -21,7 +21,8 @@
     "rfq:liquorice": "0x81c7febeed3fd67a5fdcf892d43489091caeb186",
     "vm:liquidityparty": "0x1F8b52899DCf1Be69eaFc754cA3E099Ff15F03aE",
     "vm:fermiswap": "0xe2c352232127AfC9803e7eD79F129E458B20925e",
-    "vm:bopamm": "0x63A1ffF3A4b6e93D5687f7B340Ff51bA3a88901C"
+    "vm:bopamm": "0x63A1ffF3A4b6e93D5687f7B340Ff51bA3a88901C",
+    "rfq:metric": "0xD95D619fA709BA559D9CeE7645C5F71dbCf19f0F"
   },
   "base": {
     "uniswap_v2": "0x321C00604355DD20A2CB472D44fe8f37d821A82c",
@@ -41,14 +42,15 @@
     "uniswap_v4": "0x3AE67e7DCFa6c5aB36DA9dE3B67B7496956E0874",
     "velodrome_slipstreams": "0xd9Ee40C6895De968b41b96253970B48Fe852e5eF",
     "vm:curve": "0x685733eDB7654e540aB537eabC28b554646b69d0",
-    "native_wrapper": "0x50905E0f94350f9e533Cd275667AFC728265960D"
+    "native_wrapper": "0x32Ed490Fb53cc66C3cBDdC74aB8B7088F11d6289"
   },
   "arbitrum": {
     "uniswap_v2": "0xd0a1f74d4d77834feca0efa01ca6e0161dbf1f57",
     "uniswap_v3": "0xCaAac0C6193E3e2e3E8E94bAf6367F75BaE591C9",
     "pancakeswap_v3": "0xCaAac0C6193E3e2e3E8E94bAf6367F75BaE591C9",
     "uniswap_v4": "0xdb696336F7A5F9048252664A3475C194dAe0e62f",
-    "native_wrapper": "0x117ABa0Cc2fC158318cC5640A3F8da0C426cD4ab"
+    "native_wrapper": "0x117ABa0Cc2fC158318cC5640A3F8da0C426cD4ab",
+    "rfq:metric": "0xCe5af637bFfe0C34A37f34471Ab6a3E90adf8Ffb"
   },
   "bsc": {
     "uniswap_v2": "0x450B4a643553912C9aF98dc8b9dB2eF989Fb1444",
@@ -56,13 +58,15 @@
     "uniswap_v3": "0x067fBaf88ee89DC2A4368c6DfF7237FF84522577",
     "pancakeswap_v3": "0x067fBaf88ee89DC2A4368c6DfF7237FF84522577",
     "uniswap_v4": "0x925A1aE9494ec8d92C2900dCdd6ca9Ee621E10ed",
-    "native_wrapper": "0x8c41B3842D767Bb07818E9E82fB62964910a82Ef"
+    "native_wrapper": "0x8c41B3842D767Bb07818E9E82fB62964910a82Ef",
+    "rfq:metric": "0x8A61866f7F9c979beE4426247e144aDD46cD21Aa"
   },
   "polygon": {
     "uniswap_v2": "0xb9f140F4f8d674c453b3Ee00646189452a74E10c",
     "quickswap_v2": "0xb9f140F4f8d674c453b3Ee00646189452a74E10c",
     "uniswap_v3": "0x4C409a96DE96E06f061cE55B15Cd318D3Dd2239c",
     "uniswap_v4": "0x32bB33AfB193e16df121cdc2D87c44f015D325DA",
-    "native_wrapper": "0xc8f2a896D6d98B325889CE9c998F62779d17FeE3"
+    "native_wrapper": "0xc8f2a896D6d98B325889CE9c998F62779d17FeE3",
+    "rfq:metric": "0x746Cdaf8Ef08A9d023155Dddc95291Ab8C9A7936"
   }
 }
