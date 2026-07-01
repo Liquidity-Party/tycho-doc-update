@@ -127,7 +127,7 @@ use tycho_common::{
 use crate::{
     evm::{
         decoder::{StreamDecodeError, TychoStreamDecoder},
-        override_stream::StateOverrideProvider,
+        override_stream::{self, StateOverrideProvider},
         pending::PendingBlockProcessor,
         protocol::{
             native_wrapper::state::NativeWrapperState,
@@ -673,10 +673,8 @@ impl ProtocolStreamBuilder {
     fn install_override_providers(&mut self) {
         let explicit = std::mem::take(&mut self.override_providers);
         let covered: HashSet<String> = explicit.keys().cloned().collect();
-        let defaults = crate::evm::override_stream::default_override_providers(
-            &self.registered_exchanges,
-            &covered,
-        );
+        let defaults =
+            override_stream::default_override_providers(&self.registered_exchanges, &covered);
         for (protocol_system, provider) in defaults.into_iter().chain(explicit) {
             self.decoder
                 .set_override_provider(protocol_system, provider);
