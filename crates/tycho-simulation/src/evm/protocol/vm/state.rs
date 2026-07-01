@@ -524,12 +524,12 @@ where
 
         // Merge `block_lasting_overwrites` with `token_overwrites`
         let mut merged_overwrites =
-            self.merge(&self.block_lasting_overwrites.clone(), &token_overwrites);
+            self.merge(self.block_lasting_overwrites.clone(), token_overwrites);
 
         // Live overrides (e.g. Titan pAMM oracle state) take precedence on conflict.
         if let Some(live) = live {
             if !live.storage.is_empty() {
-                merged_overwrites = self.merge(&merged_overwrites, live.storage.as_ref());
+                merged_overwrites = self.merge(merged_overwrites, live.storage.as_ref().clone());
             }
         }
 
@@ -579,7 +579,7 @@ where
         // Merge all overwrites into a single HashMap
         Ok(res
             .into_iter()
-            .fold(HashMap::new(), |acc, overwrite| self.merge(&acc, &overwrite)))
+            .fold(HashMap::new(), |acc, overwrite| self.merge(acc, overwrite)))
     }
 
     /// Gets all balance overwrites for the pool's tokens.
@@ -650,21 +650,20 @@ where
         Ok(balance_overwrites)
     }
 
+    /// Merges `source` into `target` and returns the result. On a per-slot conflict, `source` wins.
     fn merge(
         &self,
-        target: &HashMap<Address, Overwrites>,
-        source: &HashMap<Address, Overwrites>,
+        mut target: HashMap<Address, Overwrites>,
+        source: HashMap<Address, Overwrites>,
     ) -> HashMap<Address, Overwrites> {
-        let mut merged = target.clone();
-
         for (key, source_inner) in source {
-            merged
-                .entry(*key)
+            target
+                .entry(key)
                 .or_default()
-                .extend(source_inner.clone());
+                .extend(source_inner);
         }
 
-        merged
+        target
     }
 
     #[cfg(test)]
@@ -781,7 +780,7 @@ where
             sell_amount_limit,
             live_snapshot.as_ref(),
         )?;
-        let complete_overwrites = self.merge(&overwrites, &overwrites_with_sell_limit);
+        let complete_overwrites = self.merge(overwrites, overwrites_with_sell_limit);
 
         let (trade, state_changes) = self.adapter_contract.swap(
             &self.id,
