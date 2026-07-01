@@ -241,7 +241,7 @@ pub struct ProtocolStreamBuilder {
     override_providers: HashMap<String, Arc<dyn StateOverrideProvider>>,
     /// Names of all exchanges registered on the builder, used to decide which built-in override
     /// providers to auto-register at build time.
-    registered_exchanges: Vec<String>,
+    registered_exchanges: HashSet<String>,
 }
 
 impl ProtocolStreamBuilder {
@@ -263,7 +263,7 @@ impl ProtocolStreamBuilder {
             step_peek_tx: None,
             step_trigger_rx: None,
             override_providers: HashMap::new(),
-            registered_exchanges: Vec::new(),
+            registered_exchanges: HashSet::new(),
         }
     }
 
@@ -303,7 +303,7 @@ impl ProtocolStreamBuilder {
             .stream_builder
             .exchange(name, filter);
         self.registered_exchanges
-            .push(name.to_string());
+            .insert(name.to_string());
         self.decoder.register_decoder::<T>(name);
         if let Some(predicate) = filter_fn {
             self.decoder
@@ -359,7 +359,7 @@ impl ProtocolStreamBuilder {
             .stream_builder
             .exchange(name, filter);
         self.registered_exchanges
-            .push(name.to_string());
+            .insert(name.to_string());
         self.decoder
             .register_decoder_with_context::<T>(name, decoder_context);
         if let Some(predicate) = filter_fn {
@@ -672,9 +672,14 @@ impl ProtocolStreamBuilder {
     /// then fills every remaining protocol it can serve.
     fn install_override_providers(&mut self) {
         let explicit = std::mem::take(&mut self.override_providers);
-        let covered: HashSet<String> = explicit.keys().cloned().collect();
-        let defaults =
-            override_stream::default_override_providers(&self.registered_exchanges, &covered);
+        // Protocols eligible for a built-in default provider: registered exchanges not explicitly
+        // overridden by the consumer.
+        let uncovered = self
+            .registered_exchanges
+            .clone()
+            .into_iter()
+            .filter(|exchange| !explicit.contains_key(exchange));
+        let defaults = override_stream::default_override_providers(uncovered);
         for (protocol_system, provider) in defaults.into_iter().chain(explicit) {
             self.decoder
                 .set_override_provider(protocol_system, provider);

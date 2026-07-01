@@ -23,10 +23,7 @@
 
 pub mod titan;
 
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
+use std::{collections::HashMap, sync::Arc};
 
 use alloy::primitives::{Address, U256};
 use tokio::sync::watch;
@@ -64,16 +61,15 @@ pub trait StateOverrideProvider: Send + Sync {
 
 /// The default registry of built-in override providers, keyed by `protocol_system`.
 ///
-/// Given the `registered_exchanges` and the set of protocols already `covered` by explicit
-/// consumer registrations, returns the providers that should serve the remaining protocols. This
-/// is the single place that wires concrete providers (e.g. the Titan pAMM stream) into the
-/// otherwise protocol-agnostic stream builder, keeping all venue-specific knowledge out of both the
-/// builder and the generic override core. Protocols in `covered` are left to the consumer.
+/// `protocols` yields the protocol systems the caller wants a built-in default for (i.e. registered
+/// exchanges minus any the consumer explicitly overrode — the builder computes that difference and
+/// forwards it as an owned iterator, avoiding clones). This is the single place that wires concrete
+/// providers (e.g. the Titan pAMM stream) into the otherwise protocol-agnostic stream builder,
+/// keeping all venue-specific knowledge out of both the builder and the generic override core.
 pub(crate) fn default_override_providers(
-    registered_exchanges: &[String],
-    covered: &HashSet<String>,
+    protocols: impl IntoIterator<Item = String>,
 ) -> HashMap<String, Arc<dyn StateOverrideProvider>> {
     let mut providers: HashMap<String, Arc<dyn StateOverrideProvider>> = HashMap::new();
-    providers.extend(titan::default_providers(registered_exchanges, covered));
+    providers.extend(titan::default_providers(protocols));
     providers
 }

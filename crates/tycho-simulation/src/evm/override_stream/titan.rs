@@ -9,11 +9,7 @@
 //! All Titan/Fermi-specific knowledge (venue addresses, lane-timestamp resolution, endpoint URL)
 //! lives only in this module; the rest of the override machinery is protocol-agnostic.
 
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use alloy::primitives::{Address, U256};
 use futures::StreamExt;
@@ -99,22 +95,21 @@ fn known_pamm_protocols() -> &'static [&'static str] {
 
 /// Default override providers contributed by Titan, keyed by `protocol_system`.
 ///
-/// Returns one shared [`TitanProvider`] mapped under every known pAMM `protocol_system` that is
-/// both present in `registered_exchanges` and absent from `covered`. The provider is spawned only
-/// when at least one such venue needs serving — so a caller who overrides every Titan venue opens
-/// no connection. The single provider is shared across its protocols via `Arc`, not duplicated.
+/// Returns one shared [`TitanProvider`] mapped under every known pAMM `protocol_system` yielded by
+/// `protocols` (the ones the caller wants a built-in default for). Takes an owned iterator so the
+/// caller can forward its strings without cloning. The provider is spawned only when at least one
+/// such venue needs serving — so an empty or fully-overridden `protocols` opens no connection. The
+/// single provider is shared across its protocols via `Arc`, not duplicated.
 pub fn default_providers(
-    registered_exchanges: &[String],
-    covered: &HashSet<String>,
+    protocols: impl IntoIterator<Item = String>,
 ) -> HashMap<String, Arc<dyn StateOverrideProvider>> {
-    let needed: Vec<&'static str> = known_pamm_protocols()
-        .iter()
-        .copied()
-        .filter(|&protocol| {
-            registered_exchanges
+    let needed: Vec<&'static str> = protocols
+        .into_iter()
+        .filter_map(|protocol| {
+            known_pamm_protocols()
                 .iter()
-                .any(|e| e.as_str() == protocol) &&
-                !covered.contains(protocol)
+                .copied()
+                .find(|&known| known == protocol.as_str())
         })
         .collect();
     if needed.is_empty() {
@@ -122,9 +117,9 @@ pub fn default_providers(
     }
     // Auto-registration endpoint: the `TITAN_PAMM_STREAM_URL` env override if set, else the
     // built-in default. Consumers needing a different endpoint can register their own
-    // `TitanProvider::spawn(url)` via `with_override_provider` instead.
+    // `TitanProvider::spawn(url, protocols)` via `with_override_provider` instead.
     let url = std::env::var(TITAN_URL_ENV).unwrap_or_else(|_| TITAN_URL.to_string());
-    let provider: Arc<dyn StateOverrideProvider> = Arc::new(TitanProvider::spawn(url));
+    let provider: Arc<dyn StateOverrideProvider> = Arc::new(TitanProvider::spawn(url, &needed));
     needed
         .into_iter()
         .map(|protocol| (protocol.to_string(), provider.clone()))
@@ -133,16 +128,17 @@ pub fn default_providers(
 
 /// A [`StateOverrideProvider`] backed by a single Titan pAMM WebSocket connection.
 ///
-/// One connection serves all known pAMM venues; per-protocol snapshots are exposed through the
-/// `watch` receivers held here. Cheap to clone.
+/// One connection serves the `protocols` it was spawned for; per-protocol snapshots are exposed
+/// through the `watch` receivers held here. Cheap to clone.
 pub struct TitanProvider {
     /// Latest resolved snapshot per served `protocol_system`, kept fresh by the background task.
     receivers: HashMap<String, watch::Receiver<OverrideSnapshot>>,
 }
 
 impl TitanProvider {
-    /// Opens ONE WebSocket connection to `url` serving all known pAMM venues and spawns the
-    /// background reconnect/parse task that keeps the per-protocol snapshots up to date.
+    /// Opens ONE WebSocket connection to `url` serving the given `protocols` and spawns the
+    /// background reconnect/parse task that keeps their per-protocol snapshots up to date. Only the
+    /// requested protocols get a channel, and the task only parses their venues.
     ///
     /// Public so a consumer can point a provider at a custom endpoint and register it via
     /// [`ProtocolStreamBuilder::with_override_provider`](crate::evm::stream::ProtocolStreamBuilder::with_override_provider),
@@ -150,11 +146,12 @@ impl TitanProvider {
     ///
     /// Returns immediately; the connection is established and maintained in the background, so a
     /// transient WebSocket failure never blocks or crashes the caller.
-    pub fn spawn(url: String) -> Self {
+    pub fn spawn(url: String, protocols: &[&str]) -> Self {
         let mut receivers = HashMap::new();
         let mut senders = Vec::new();
-        for &protocol in known_pamm_protocols() {
+        for &protocol in protocols {
             let Some(venue) = Self::venue_for_protocol(protocol) else {
+                warn!("Unknown protocol: {protocol}");
                 continue;
             };
             let (tx, rx) = watch::channel(OverrideSnapshot::default());
@@ -259,8 +256,9 @@ impl TitanProvider {
                             // Keep-alive frames. tokio-tungstenite answers pings with pongs
                             // automatically while the stream is polled, so there is nothing to do.
                             Ok(Message::Ping(_)) | Ok(Message::Pong(_)) => {}
-                            // Raw frames only surface with non-default tungstenite settings;
-                            // ignore.
+                            // `Frame` is only produced when *sending* raw frames; the read side
+                            // never yields it, so this arm is unreachable in practice — kept only
+                            // for match exhaustiveness.
                             Ok(Message::Frame(_)) => {}
                             // Server initiated a graceful close — reconnect.
                             Ok(Message::Close(frame)) => {
