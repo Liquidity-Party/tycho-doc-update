@@ -83,6 +83,10 @@ const BOPAMM_VENUE: &str = "0x160141a205f5ddcf096ba3f48b7ed21eb52c62ea";
 /// stalled or half-open connection that [`StreamExt::next`] would otherwise wait on forever.
 const READ_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// Longest a single connection attempt may take before it is aborted and retried, so a hung TCP/TLS
+/// handshake cannot block the background task forever.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+
 /// Reconnect backoff is `2^min(attempt, MAX_BACKOFF_EXP)` seconds, i.e. capped at 32s.
 const MAX_BACKOFF_EXP: u32 = 5;
 
@@ -163,8 +167,8 @@ impl TitanProvider {
     async fn run(url: String, senders: Vec<(Address, watch::Sender<OverrideSnapshot>)>) {
         let mut attempt: u32 = 0;
         loop {
-            match connect_async(url.as_str()).await {
-                Ok((mut ws_stream, _)) => {
+            match timeout(CONNECT_TIMEOUT, connect_async(url.as_str())).await {
+                Ok(Ok((mut ws_stream, _))) => {
                     info!(%url, "Connected to Titan pAMM quote stream");
                     loop {
                         // Bound the wait so a half-open connection (no data and no close frame) is
@@ -243,9 +247,16 @@ impl TitanProvider {
                         }
                     }
                 }
-                // Could not establish the connection at all — fall through to backoff and retry.
-                Err(e) => {
+                // Connection refused / TLS error — fall through to backoff and retry.
+                Ok(Err(e)) => {
                     warn!(error = %e, "Failed to connect to Titan quote stream; retrying");
+                }
+                // Handshake did not complete within the timeout — retry after backoff.
+                Err(_elapsed) => {
+                    warn!(
+                        timeout_secs = CONNECT_TIMEOUT.as_secs(),
+                        "Titan connect timed out; retrying"
+                    );
                 }
             }
 
