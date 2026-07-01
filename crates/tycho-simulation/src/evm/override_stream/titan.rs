@@ -17,7 +17,7 @@ use std::{
 
 use alloy::primitives::{Address, U256};
 use futures::StreamExt;
-use serde_json::Value;
+use serde::Deserialize;
 use tokio::{
     sync::watch,
     time::{sleep, timeout},
@@ -29,6 +29,37 @@ use super::{OverrideSnapshot, StateOverrideProvider};
 
 /// Storage overrides keyed by contract address, then by storage slot.
 type VenueOverrides = HashMap<Address, HashMap<U256, U256>>;
+
+/// A parsed Titan quote-stream frame.
+///
+/// Only `blockNumber` is consumed at this level; every other top-level key (venue addresses,
+/// `slot`, `timestamp`, and any future fields) lands in `overrides` as raw JSON. Only the venue
+/// keys we look up are then deserialized into [`AddressEntry`], so an upstream schema change that
+/// adds top-level fields never breaks parsing.
+#[derive(Debug, Deserialize)]
+struct TitanMessage {
+    #[serde(rename = "blockNumber", default)]
+    block_number: Option<u64>,
+    #[serde(flatten)]
+    overrides: HashMap<String, serde_json::Value>,
+}
+
+/// A single venue's override set, following the eth_call State Override Set shape. Only
+/// `stateOverride` is consumed; account addresses are parsed straight from their `0x` hex keys.
+#[derive(Debug, Deserialize)]
+struct AddressEntry {
+    #[serde(rename = "stateOverride", default)]
+    state_override: HashMap<Address, AccountState>,
+}
+
+/// A single account's override. Only `stateDiff` (storage slot -> value) is used, deserialized
+/// directly from its `0x` hex string keys and values; balance / nonce / code are ignored (serde
+/// drops unknown fields).
+#[derive(Debug, Deserialize)]
+struct AccountState {
+    #[serde(rename = "stateDiff", default)]
+    state_diff: HashMap<U256, U256>,
+}
 
 /// Default Titan pAMM quote-stream WebSocket endpoint serving all known pAMM venues.
 const TITAN_URL: &str = "wss://eu.rpc.titanbuilder.xyz/ws/pamm_quote_stream";
@@ -156,27 +187,35 @@ impl TitanProvider {
                         };
 
                         match message {
-                            // Expected case: a JSON quote-stream frame. Parse it once per venue and
-                            // publish any resolved snapshot. Receiving a frame proves the
-                            // connection is healthy, so reset the reconnect backoff.
+                            // Expected case: a JSON quote-stream frame. Deserialize it once, then
+                            // extract each venue's snapshot from the parsed value. Receiving a
+                            // frame proves the connection is healthy,
+                            // so reset the reconnect backoff.
                             Ok(Message::Text(text)) => {
                                 attempt = 0;
-                                for (venue, sender) in &senders {
-                                    match Self::parse_message(text.as_str(), venue) {
-                                        Ok(Some(snapshot)) => {
-                                            // A send error here only means every receiver (the
-                                            // provider handle and all pools) has been dropped, i.e.
-                                            // nothing consumes overrides anymore; safe to ignore.
-                                            let _ = sender.send(snapshot);
-                                        }
-                                        // Venue not present in this message — nothing to update.
-                                        Ok(None) => {}
-                                        // Malformed payload for this venue: keep the connection and
-                                        // the last good snapshot, but surface the problem.
-                                        Err(e) => {
-                                            warn!(%venue, error = %e, "Failed to parse Titan message");
+                                match serde_json::from_str::<TitanMessage>(text.as_str()) {
+                                    Ok(message) => {
+                                        for (venue, sender) in &senders {
+                                            match Self::extract_venue(&message, venue) {
+                                                // A send error here only means every receiver (the
+                                                // provider handle and all pools) has been dropped,
+                                                // i.e. nothing consumes overrides anymore; ignore.
+                                                Ok(Some(snapshot)) => {
+                                                    let _ = sender.send(snapshot);
+                                                }
+                                                // Venue not present in this frame — nothing to do.
+                                                Ok(None) => {}
+                                                // Malformed payload for this venue: keep the
+                                                // connection and last good snapshot, but surface
+                                                // it.
+                                                Err(e) => {
+                                                    warn!(%venue, error = %e, "Failed to extract Titan venue snapshot");
+                                                }
+                                            }
                                         }
                                     }
+                                    // Unparseable frame: log and keep the connection.
+                                    Err(e) => warn!(error = %e, "Failed to parse Titan message"),
                                 }
                             }
                             // Titan only sends JSON text; a binary frame is unexpected. Skip it and
@@ -231,58 +270,33 @@ impl TitanProvider {
     }
 
     /// Extracts a single venue's snapshot (`stateDiff` overrides + resolved block environment)
-    /// from a Titan stream message.
+    /// from an already-parsed Titan stream frame (deserialized once by the caller, then queried per
+    /// venue).
     ///
-    /// Returns `Ok(None)` if the venue is absent from the message. The block timestamp is resolved
+    /// Returns `Ok(None)` if the venue is absent from the frame. The block timestamp is resolved
     /// from the freshest lane update timestamp (see
     /// [`max_lane_timestamp`](Self::max_lane_timestamp)) so the pool's oracle-staleness guard
     /// sees the overridden prices as current.
-    fn parse_message(text: &str, venue: &Address) -> Result<Option<OverrideSnapshot>, String> {
-        let root: Value = serde_json::from_str(text).map_err(|e| format!("invalid JSON: {e}"))?;
-
-        // Each message carries one top-level entry per venue address, alongside `slot`,
-        // `blockNumber` and a wall-clock `timestamp`. Absent venue => nothing to apply.
+    fn extract_venue(
+        message: &TitanMessage,
+        venue: &Address,
+    ) -> Result<Option<OverrideSnapshot>, String> {
+        // Each frame carries one top-level entry per venue address. Absent => nothing to apply.
         let venue_key = format!("{venue:#x}");
-        let Some(venue_entry) = root.get(&venue_key) else {
+        let Some(raw) = message.overrides.get(&venue_key) else {
             return Ok(None);
         };
+        let entry: AddressEntry = serde_json::from_value(raw.clone())
+            .map_err(|e| format!("invalid venue override: {e}"))?;
 
-        let block_number = root
-            .get("blockNumber")
-            .and_then(Value::as_u64);
+        let block_number = message.block_number;
 
-        // `stateOverride` mirrors the eth_call State Override Set: account -> { stateDiff: slot ->
-        // value, ... }. We only consume `stateDiff` storage; balance/nonce/code are ignored.
+        // We only consume `stateDiff` storage; balance / nonce / code are ignored. Slots and values
+        // were parsed into `U256` by serde, so we just drop accounts with no overrides.
         let mut storage: VenueOverrides = HashMap::new();
-        if let Some(state_override) = venue_entry
-            .get("stateOverride")
-            .and_then(Value::as_object)
-        {
-            for (account, account_state) in state_override {
-                let address = account
-                    .parse::<Address>()
-                    .map_err(|e| format!("invalid account address {account}: {e}"))?;
-                let Some(state_diff) = account_state
-                    .get("stateDiff")
-                    .and_then(Value::as_object)
-                else {
-                    continue;
-                };
-                let mut slots = HashMap::new();
-                for (slot, value) in state_diff {
-                    let slot = slot
-                        .parse::<U256>()
-                        .map_err(|e| format!("invalid storage slot {slot}: {e}"))?;
-                    let value = value
-                        .as_str()
-                        .ok_or_else(|| format!("storage value for slot {slot} is not a string"))?
-                        .parse::<U256>()
-                        .map_err(|e| format!("invalid storage value: {e}"))?;
-                    slots.insert(slot, value);
-                }
-                if !slots.is_empty() {
-                    storage.insert(address, slots);
-                }
+        for (account, account_override) in entry.state_override {
+            if !account_override.state_diff.is_empty() {
+                storage.insert(account, account_override.state_diff);
             }
         }
 
@@ -379,12 +393,13 @@ mod tests {
     }"#;
 
     #[test]
-    fn parse_message_extracts_venue_state_diff() {
+    fn extract_venue_reads_state_diff() {
         let venue = FERMISWAP_VENUE
             .parse::<Address>()
             .unwrap();
-        let snapshot = TitanProvider::parse_message(SAMPLE_MESSAGE, &venue)
-            .expect("parse must succeed")
+        let message = serde_json::from_str::<TitanMessage>(SAMPLE_MESSAGE).expect("valid JSON");
+        let snapshot = TitanProvider::extract_venue(&message, &venue)
+            .expect("extract must succeed")
             .expect("venue is present");
 
         assert_eq!(snapshot.block_number, Some(25051224));
@@ -408,11 +423,12 @@ mod tests {
     }
 
     #[test]
-    fn parse_message_returns_none_for_absent_venue() {
+    fn extract_venue_returns_none_for_absent_venue() {
         let venue = KIPSELI_VENUE
             .parse::<Address>()
             .unwrap();
-        assert!(TitanProvider::parse_message(SAMPLE_MESSAGE, &venue)
+        let message = serde_json::from_str::<TitanMessage>(SAMPLE_MESSAGE).expect("valid JSON");
+        assert!(TitanProvider::extract_venue(&message, &venue)
             .unwrap()
             .is_none());
     }
