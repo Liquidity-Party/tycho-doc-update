@@ -63,6 +63,8 @@ struct AccountState {
 
 /// Default Titan pAMM quote-stream WebSocket endpoint serving all known pAMM venues.
 const TITAN_URL: &str = "wss://eu.rpc.titanbuilder.xyz/ws/pamm_quote_stream";
+/// Environment variable that overrides the default endpoint when no custom URL is passed.
+const TITAN_URL_ENV: &str = "TITAN_PAMM_STREAM_URL";
 
 /// FermiSwap protocol system identifier as indexed by Tycho.
 const FERMISWAP_PROTOCOL_SYSTEM: &str = "vm:fermiswap";
@@ -118,8 +120,11 @@ pub fn default_providers(
     if needed.is_empty() {
         return HashMap::new();
     }
-    let provider: Arc<dyn StateOverrideProvider> =
-        Arc::new(TitanProvider::spawn(TITAN_URL.to_string()));
+    // Auto-registration endpoint: the `TITAN_PAMM_STREAM_URL` env override if set, else the
+    // built-in default. Consumers needing a different endpoint can register their own
+    // `TitanProvider::spawn(url)` via `with_override_provider` instead.
+    let url = std::env::var(TITAN_URL_ENV).unwrap_or_else(|_| TITAN_URL.to_string());
+    let provider: Arc<dyn StateOverrideProvider> = Arc::new(TitanProvider::spawn(url));
     needed
         .into_iter()
         .map(|protocol| (protocol.to_string(), provider.clone()))
@@ -136,8 +141,12 @@ pub struct TitanProvider {
 }
 
 impl TitanProvider {
-    /// Opens ONE WebSocket connection to Titan serving all known pAMM venues and spawns the
+    /// Opens ONE WebSocket connection to `url` serving all known pAMM venues and spawns the
     /// background reconnect/parse task that keeps the per-protocol snapshots up to date.
+    ///
+    /// Public so a consumer can point a provider at a custom endpoint and register it via
+    /// [`ProtocolStreamBuilder::with_override_provider`](crate::evm::stream::ProtocolStreamBuilder::with_override_provider),
+    /// which takes precedence over the default registry.
     ///
     /// Returns immediately; the connection is established and maintained in the background, so a
     /// transient WebSocket failure never blocks or crashes the caller.
