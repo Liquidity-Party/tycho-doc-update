@@ -366,8 +366,7 @@ impl ProtocolStreamProcessor {
                 );
             }
             "lunarbase" => {
-                stream =
-                    stream.exchange::<LunarBaseState>("lunarbase", tvl_filter.clone(), None);
+                stream = stream.exchange::<LunarBaseState>("lunarbase", tvl_filter.clone(), None);
             }
             _ => {
                 return Err(miette::miette!("Unknown protocol: {}", protocol));
