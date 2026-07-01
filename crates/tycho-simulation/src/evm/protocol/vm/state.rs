@@ -529,7 +529,7 @@ where
         // Live overrides (e.g. Titan pAMM oracle state) take precedence on conflict.
         if let Some(live) = live {
             if !live.storage.is_empty() {
-                merged_overwrites = self.merge(&merged_overwrites, &live.storage);
+                merged_overwrites = self.merge(&merged_overwrites, live.storage.as_ref());
             }
         }
 

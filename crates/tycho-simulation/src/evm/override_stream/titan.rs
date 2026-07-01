@@ -345,7 +345,7 @@ impl TitanProvider {
         // as current.
         let block_timestamp = Self::max_lane_timestamp(&storage);
 
-        Ok(Some(OverrideSnapshot { block_number, block_timestamp, storage }))
+        Ok(Some(OverrideSnapshot { block_number, block_timestamp, storage: Arc::new(storage) }))
     }
 
     /// Returns the newest lane update timestamp (in seconds) across all overridden slots.

@@ -42,8 +42,10 @@ pub struct OverrideSnapshot {
     pub block_number: Option<u64>,
     /// The block timestamp to inject into the pool's simulation environment, if known.
     pub block_timestamp: Option<u64>,
-    /// Storage overrides keyed by contract address, then by storage slot.
-    pub storage: HashMap<Address, HashMap<U256, U256>>,
+    /// Storage overrides keyed by contract address, then by storage slot. `Arc`-wrapped so a pool
+    /// can read the latest snapshot on every simulation with a refcount bump rather than a deep
+    /// clone of the nested map.
+    pub storage: Arc<HashMap<Address, HashMap<U256, U256>>>,
 }
 
 /// Supplies a *live* stream of resolved per-block VM overrides for one or more protocols.
