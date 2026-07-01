@@ -163,24 +163,26 @@ where
         self.live_overrides = Some(receiver);
     }
 
-    /// Storage overwrites from the live override channel, if one is attached and has data.
-    fn live_storage_overwrites(&self) -> Option<HashMap<Address, Overwrites>> {
-        let snapshot = self.live_overrides.as_ref()?.borrow();
-        if snapshot.storage.is_empty() {
-            None
-        } else {
-            Some(snapshot.storage.clone())
-        }
+    /// Reads the latest live override snapshot once, if a channel is attached.
+    ///
+    /// The `watch::Ref` guard is released immediately; the returned value is a clone. A single
+    /// simulation resolves both its storage overwrites and its block environment from this one
+    /// snapshot, so it can never mix storage from one snapshot with a block environment from
+    /// another, and never holds the channel's read lock across EVM calls.
+    fn get_live_snapshot(&self) -> Option<OverrideSnapshot> {
+        self.live_overrides
+            .as_ref()
+            .map(|receiver| receiver.borrow().clone())
     }
 
-    /// The block environment to apply to adapter simulations, preferring the live snapshot's
-    /// resolved block number/timestamp over the statically configured [`Self::block_overrides`].
-    fn effective_block_overrides(&self) -> Option<BlockEnvOverrides> {
+    /// The block environment to apply to adapter simulations, resolved from a single pre-read
+    /// `live` snapshot: its block number/timestamp take precedence over the statically configured
+    /// [`Self::block_overrides`].
+    fn block_env(&self, live: Option<&OverrideSnapshot>) -> Option<BlockEnvOverrides> {
         let base = self.block_overrides.to_owned();
-        let Some(receiver) = self.live_overrides.as_ref() else {
+        let Some(snapshot) = live else {
             return base;
         };
-        let snapshot = receiver.borrow();
         if snapshot.block_number.is_none() && snapshot.block_timestamp.is_none() {
             return base;
         }
@@ -252,6 +254,11 @@ where
         &mut self,
         tokens: &HashMap<Bytes, Token>,
     ) -> Result<(), SimulationError> {
+        // Read the live snapshot once and resolve the block environment from it, so every pair
+        // (and both sub-swaps in the no-capability branch) simulates against one consistent
+        // snapshot.
+        let live_snapshot = self.get_live_snapshot();
+        let block_overrides = self.block_env(live_snapshot.as_ref());
         match self.ensure_capability(Capability::PriceFunction) {
             Ok(_) => {
                 for [sell_token_address, buy_token_address] in self
@@ -266,11 +273,13 @@ where
                     let overwrites = Some(self.get_overwrites(
                         vec![sell_token_address, buy_token_address],
                         *MAX_BALANCE / U256::from(100),
+                        live_snapshot.as_ref(),
                     )?);
 
                     let (sell_amount_limit, _) = self.get_amount_limits(
                         vec![sell_token_address, buy_token_address],
                         overwrites.clone(),
+                        block_overrides.clone(),
                     )?;
                     let price_result = self.adapter_contract.price(
                         &self.id,
@@ -278,7 +287,7 @@ where
                         buy_token_address,
                         vec![sell_amount_limit / U256::from(100)],
                         overwrites,
-                        self.effective_block_overrides(),
+                        block_overrides.clone(),
                     )?;
 
                     let price = if self
@@ -314,14 +323,20 @@ where
                     let t0 = bytes_to_address(iter_tokens[0])?;
                     let t1 = bytes_to_address(iter_tokens[1])?;
 
-                    let overwrites =
-                        Some(self.get_overwrites(vec![t0, t1], *MAX_BALANCE / U256::from(100))?);
+                    let overwrites = Some(self.get_overwrites(
+                        vec![t0, t1],
+                        *MAX_BALANCE / U256::from(100),
+                        live_snapshot.as_ref(),
+                    )?);
 
                     // Calculate the first sell amount (x1) as 1% of the maximum limit.
-                    let x1 = self
-                        .get_amount_limits(vec![t0, t1], overwrites.clone())?
-                        .0 /
-                        U256::from(100);
+                    let x1 =
+                        self.get_amount_limits(
+                            vec![t0, t1],
+                            overwrites.clone(),
+                            block_overrides.clone(),
+                        )?
+                        .0 / U256::from(100);
 
                     // Calculate the second sell amount (x2) as x1 + 1% of x1. 1.01% of the max
                     // limit
@@ -338,7 +353,7 @@ where
                             false,
                             x1,
                             overwrites.clone(),
-                            self.effective_block_overrides(),
+                            block_overrides.clone(),
                         )?
                         .0
                         .received_amount;
@@ -347,15 +362,7 @@ where
                     // amount (y2).
                     let y2 = self
                         .adapter_contract
-                        .swap(
-                            &self.id,
-                            t0,
-                            t1,
-                            false,
-                            x2,
-                            overwrites,
-                            self.effective_block_overrides(),
-                        )?
+                        .swap(&self.id, t0, t1, false, x2, overwrites, block_overrides.clone())?
                         .0
                         .received_amount;
 
@@ -423,13 +430,14 @@ where
         &self,
         tokens: Vec<Address>,
         overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
+        block_overrides: Option<BlockEnvOverrides>,
     ) -> Result<(U256, U256), SimulationError> {
         let limits = self.adapter_contract.get_limits(
             &self.id,
             tokens[0],
             tokens[1],
             overwrites,
-            self.effective_block_overrides(),
+            block_overrides,
         )?;
 
         Ok(limits)
@@ -510,6 +518,7 @@ where
         &self,
         tokens: Vec<Address>,
         max_amount: U256,
+        live: Option<&OverrideSnapshot>,
     ) -> Result<HashMap<Address, Overwrites>, SimulationError> {
         let token_overwrites = self.get_token_overwrites(tokens, max_amount)?;
 
@@ -518,8 +527,10 @@ where
             self.merge(&self.block_lasting_overwrites.clone(), &token_overwrites);
 
         // Live overrides (e.g. Titan pAMM oracle state) take precedence on conflict.
-        if let Some(live_overwrites) = self.live_storage_overwrites() {
-            merged_overwrites = self.merge(&merged_overwrites, &live_overwrites);
+        if let Some(live) = live {
+            if !live.storage.is_empty() {
+                merged_overwrites = self.merge(&merged_overwrites, &live.storage);
+            }
         }
 
         Ok(merged_overwrites)
@@ -678,7 +689,8 @@ where
 
     #[cfg(test)]
     pub fn get_block_overrides(&self) -> Option<BlockEnvOverrides> {
-        self.effective_block_overrides()
+        let live_snapshot = self.get_live_snapshot();
+        self.block_env(live_snapshot.as_ref())
     }
 }
 
@@ -741,13 +753,18 @@ where
         let sell_token_address = bytes_to_address(&token_in.address)?;
         let buy_token_address = bytes_to_address(&token_out.address)?;
         let sell_amount = U256::from_be_slice(&amount_in.to_bytes_be());
+        // Read the live snapshot once so overwrites, limits and the swap use one snapshot.
+        let live_snapshot = self.get_live_snapshot();
+        let block_overrides = self.block_env(live_snapshot.as_ref());
         let overwrites = self.get_overwrites(
             vec![sell_token_address, buy_token_address],
             *MAX_BALANCE / U256::from(100),
+            live_snapshot.as_ref(),
         )?;
         let (sell_amount_limit, _) = self.get_amount_limits(
             vec![sell_token_address, buy_token_address],
             Some(overwrites.clone()),
+            block_overrides.clone(),
         )?;
         let (sell_amount_respecting_limit, sell_amount_exceeds_limit) = if self
             .capabilities
@@ -759,8 +776,11 @@ where
             (sell_amount, false)
         };
 
-        let overwrites_with_sell_limit =
-            self.get_overwrites(vec![sell_token_address, buy_token_address], sell_amount_limit)?;
+        let overwrites_with_sell_limit = self.get_overwrites(
+            vec![sell_token_address, buy_token_address],
+            sell_amount_limit,
+            live_snapshot.as_ref(),
+        )?;
         let complete_overwrites = self.merge(&overwrites, &overwrites_with_sell_limit);
 
         let (trade, state_changes) = self.adapter_contract.swap(
@@ -770,7 +790,7 @@ where
             false,
             sell_amount_respecting_limit,
             Some(complete_overwrites),
-            self.effective_block_overrides(),
+            block_overrides,
         )?;
 
         let mut new_state = self.clone();
@@ -827,9 +847,17 @@ where
     ) -> Result<(BigUint, BigUint), SimulationError> {
         let sell_token = bytes_to_address(&sell_token)?;
         let buy_token = bytes_to_address(&buy_token)?;
-        let overwrites =
-            self.get_overwrites(vec![sell_token, buy_token], *MAX_BALANCE / U256::from(100))?;
-        let limits = self.get_amount_limits(vec![sell_token, buy_token], Some(overwrites))?;
+        let live_snapshot = self.get_live_snapshot();
+        let overwrites = self.get_overwrites(
+            vec![sell_token, buy_token],
+            *MAX_BALANCE / U256::from(100),
+            live_snapshot.as_ref(),
+        )?;
+        let limits = self.get_amount_limits(
+            vec![sell_token, buy_token],
+            Some(overwrites),
+            self.block_env(live_snapshot.as_ref()),
+        )?;
         Ok((u256_to_biguint(limits.0), u256_to_biguint(limits.1)))
     }
 
@@ -1250,10 +1278,15 @@ mod tests {
                     bytes_to_address(&pool_state.tokens[1]).unwrap(),
                 ],
                 *MAX_BALANCE / U256::from(100),
+                None,
             )
             .unwrap();
         let (dai_limit, _) = pool_state
-            .get_amount_limits(vec![dai_addr(), bal_addr()], Some(overwrites.clone()))
+            .get_amount_limits(
+                vec![dai_addr(), bal_addr()],
+                Some(overwrites.clone()),
+                pool_state.block_env(None),
+            )
             .unwrap();
         assert_eq!(dai_limit, U256::from_str("100279494253364362835").unwrap());
 
@@ -1264,6 +1297,7 @@ mod tests {
                     bytes_to_address(&pool_state.tokens[0]).unwrap(),
                 ],
                 Some(overwrites),
+                pool_state.block_env(None),
             )
             .unwrap();
         assert_eq!(bal_limit, U256::from_str("13997408640689987484").unwrap());
