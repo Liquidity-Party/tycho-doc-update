@@ -167,6 +167,18 @@ impl TitanProvider {
     async fn run(url: String, senders: Vec<(Address, watch::Sender<OverrideSnapshot>)>) {
         let mut attempt: u32 = 0;
         loop {
+            // Every receiver (the provider handle plus all pool clones) has been dropped, so
+            // nobody consumes overrides anymore: stop the task and release the connection.
+            // Because `subscribe` needs a live provider (which owns the master receivers), once
+            // this is true no future pool can obtain the channel either.
+            if senders
+                .iter()
+                .all(|(_, tx)| tx.is_closed())
+            {
+                warn!("All Titan override receivers dropped; stopping quote-stream task");
+                return;
+            }
+
             match timeout(CONNECT_TIMEOUT, connect_async(url.as_str())).await {
                 Ok(Ok((mut ws_stream, _))) => {
                     info!(%url, "Connected to Titan pAMM quote stream");
@@ -201,9 +213,9 @@ impl TitanProvider {
                                     Ok(message) => {
                                         for (venue, sender) in &senders {
                                             match Self::extract_venue(&message, venue) {
-                                                // A send error here only means every receiver (the
-                                                // provider handle and all pools) has been dropped,
-                                                // i.e. nothing consumes overrides anymore; ignore.
+                                                // A send error means every receiver has been
+                                                // dropped; the check after this loop stops the
+                                                // task, so ignoring it here is safe.
                                                 Ok(Some(snapshot)) => {
                                                     let _ = sender.send(snapshot);
                                                 }
@@ -220,6 +232,14 @@ impl TitanProvider {
                                     }
                                     // Unparseable frame: log and keep the connection.
                                     Err(e) => warn!(error = %e, "Failed to parse Titan message"),
+                                }
+                                // Stop promptly if every consumer went away while connected.
+                                if senders
+                                    .iter()
+                                    .all(|(_, tx)| tx.is_closed())
+                                {
+                                    warn!("All Titan override receivers dropped; stopping quote-stream task");
+                                    return;
                                 }
                             }
                             // Titan only sends JSON text; a binary frame is unexpected. Skip it and
