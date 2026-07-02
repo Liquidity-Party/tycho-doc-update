@@ -43,6 +43,22 @@ pub struct OverrideSnapshot {
     /// can read the latest snapshot on every simulation with a refcount bump rather than a deep
     /// clone of the nested map.
     pub storage: Arc<HashMap<Address, HashMap<U256, U256>>>,
+    /// Unix-seconds instant after which these overrides are stale and must not be used. Set by the
+    /// provider from its own freshness rules (e.g. Titan uses the quote timestamp plus one block
+    /// time). `None` means the snapshot never expires — e.g. the empty initial snapshot.
+    pub expires_at: Option<u64>,
+}
+
+impl OverrideSnapshot {
+    /// Returns whether these overrides are stale at `now` (unix seconds).
+    ///
+    /// A snapshot without an [`expires_at`](Self::expires_at) never expires. Callers that read the
+    /// snapshot on every simulation should skip it entirely once this returns `true`, falling back
+    /// to whatever state they held before.
+    pub fn is_expired(&self, now: u64) -> bool {
+        self.expires_at
+            .is_some_and(|expires_at| now >= expires_at)
+    }
 }
 
 /// Supplies a *live* stream of resolved per-block VM overrides for one or more protocols.
@@ -72,4 +88,23 @@ pub(crate) fn default_override_providers(
     let mut providers: HashMap<String, Arc<dyn StateOverrideProvider>> = HashMap::new();
     providers.extend(titan::default_providers(protocols));
     providers
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn snapshot_without_expiry_never_expires() {
+        let snapshot = OverrideSnapshot::default();
+        assert!(!snapshot.is_expired(u64::MAX));
+    }
+
+    #[test]
+    fn snapshot_expires_at_or_after_deadline() {
+        let snapshot = OverrideSnapshot { expires_at: Some(100), ..Default::default() };
+        assert!(!snapshot.is_expired(99));
+        assert!(snapshot.is_expired(100));
+        assert!(snapshot.is_expired(101));
+    }
 }

@@ -28,14 +28,17 @@ type VenueOverrides = HashMap<Address, HashMap<U256, U256>>;
 
 /// A parsed Titan quote-stream frame.
 ///
-/// Only `blockNumber` is consumed at this level; every other top-level key (venue addresses,
-/// `slot`, `timestamp`, and any future fields) lands in `overrides` as raw JSON. Only the venue
-/// keys we look up are then deserialized into [`AddressEntry`], so an upstream schema change that
-/// adds top-level fields never breaks parsing.
+/// `blockNumber` and `timestamp` (the nanosecond wall-clock instant Titan built the quote) are
+/// consumed at this level; every other top-level key (venue addresses, `slot`, and any future
+/// fields) lands in `overrides` as raw JSON. Only the venue keys we look up are then deserialized
+/// into [`AddressEntry`], so an upstream schema change that adds top-level fields never breaks
+/// parsing.
 #[derive(Debug, Deserialize)]
 struct TitanMessage {
     #[serde(rename = "blockNumber", default)]
     block_number: Option<u64>,
+    #[serde(default)]
+    timestamp: Option<u64>,
     #[serde(flatten)]
     overrides: HashMap<String, serde_json::Value>,
 }
@@ -87,6 +90,12 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Reconnect backoff is `2^min(attempt, MAX_BACKOFF_EXP)` seconds, i.e. capped at 32s.
 const MAX_BACKOFF_EXP: u32 = 5;
+
+/// How long a Titan quote stays usable after it was built, in seconds. Titan targets the pending
+/// L1 block, so one block time (12s) is the window in which the overridden prices are current; past
+/// it the snapshot is stale and the pool reverts to Tycho's indexed state. Used to derive each
+/// snapshot's [`OverrideSnapshot::expires_at`] from the frame's wall-clock `timestamp`.
+const TITAN_QUOTE_TTL_SECS: u64 = 12;
 
 /// Returns the pAMM `protocol_system`s this provider knows how to serve.
 fn known_pamm_protocols() -> &'static [&'static str] {
@@ -314,7 +323,8 @@ impl TitanProvider {
     /// Returns `Ok(None)` if the venue is absent from the frame. The block timestamp is resolved
     /// from the freshest lane update timestamp (see
     /// [`max_lane_timestamp`](Self::max_lane_timestamp)) so the pool's oracle-staleness guard
-    /// sees the overridden prices as current.
+    /// sees the overridden prices as current, and `expires_at` is set to the frame's wall-clock
+    /// `timestamp` plus [`TITAN_QUOTE_TTL_SECS`] so the pool stops using it once it goes stale.
     fn extract_venue(
         message: &TitanMessage,
         venue: &Address,
@@ -343,7 +353,19 @@ impl TitanProvider {
         // as current.
         let block_timestamp = Self::max_lane_timestamp(&storage);
 
-        Ok(Some(OverrideSnapshot { block_number, block_timestamp, storage: Arc::new(storage) }))
+        // Expire the snapshot one block time after Titan built it, using the frame's nanosecond
+        // wall-clock `timestamp`. Once past this the pool drops the override and reverts to Tycho's
+        // indexed state, so a stalled stream can never keep serving prices indefinitely.
+        let expires_at = message
+            .timestamp
+            .map(|ns| ns / 1_000_000_000 + TITAN_QUOTE_TTL_SECS);
+
+        Ok(Some(OverrideSnapshot {
+            block_number,
+            block_timestamp,
+            storage: Arc::new(storage),
+            expires_at,
+        }))
     }
 
     /// Returns the newest lane update timestamp (in seconds) across all overridden slots.
@@ -441,6 +463,8 @@ mod tests {
             .expect("venue is present");
 
         assert_eq!(snapshot.block_number, Some(25051224));
+        // 1778253913749564761 ns -> 1778253913 s, plus the 12s quote TTL.
+        assert_eq!(snapshot.expires_at, Some(1778253913 + TITAN_QUOTE_TTL_SECS));
 
         let account = "0x1038c87766e36d1925889e6f26d10e0012d50fed"
             .parse::<Address>()

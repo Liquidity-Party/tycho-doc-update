@@ -4,6 +4,7 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::{self, Debug},
     str::FromStr,
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use alloy::primitives::{Address, U256};
@@ -37,6 +38,15 @@ use crate::evm::{
     },
     simulation::BlockEnvOverrides,
 };
+
+/// Current unix time in seconds, or `0` if the system clock is before the epoch. Used to test live
+/// override snapshots against their expiry.
+fn unix_now_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_secs())
+        .unwrap_or(0)
+}
 
 #[derive(Clone)]
 pub struct EVMPoolState<D: EngineDatabaseInterface + Clone + Debug>
@@ -163,16 +173,24 @@ where
         self.live_overrides = Some(receiver);
     }
 
-    /// Reads the latest live override snapshot once, if a channel is attached.
+    /// Reads the latest live override snapshot once, if a channel is attached and still fresh.
     ///
     /// The `watch::Ref` guard is released immediately; the returned value is a clone. A single
     /// simulation resolves both its storage overwrites and its block environment from this one
     /// snapshot, so it can never mix storage from one snapshot with a block environment from
     /// another, and never holds the channel's read lock across EVM calls.
+    ///
+    /// Returns `None` once the snapshot has passed its provider-set expiry, so an expired override
+    /// is dropped and the pool transparently reverts to Tycho's indexed state.
     fn get_live_snapshot(&self) -> Option<OverrideSnapshot> {
-        self.live_overrides
+        let snapshot = self
+            .live_overrides
             .as_ref()
-            .map(|receiver| receiver.borrow().clone())
+            .map(|receiver| receiver.borrow().clone())?;
+        if snapshot.is_expired(unix_now_secs()) {
+            return None;
+        }
+        Some(snapshot)
     }
 
     /// The block environment to apply to adapter simulations, resolved from a single pre-read
