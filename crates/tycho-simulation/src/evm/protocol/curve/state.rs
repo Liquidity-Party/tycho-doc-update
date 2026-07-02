@@ -196,7 +196,12 @@ impl ProtocolSim for CurveState {
         let max_out = self
             .pool
             .get_amount_out(i, j, balance_in)
-            .unwrap_or(max_out_reserve)
+            .ok_or_else(|| {
+                SimulationError::RecoverableError(format!(
+                    "curve get_limits: solver failed at max input for {}",
+                    self.pool_address
+                ))
+            })?
             .min(max_out_reserve);
         Ok((u256_to_biguint(balance_in), u256_to_biguint(max_out)))
     }
