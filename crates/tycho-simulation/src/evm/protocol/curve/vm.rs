@@ -98,16 +98,16 @@ where
             variant,
             balances: read_balances_int128(engine, pool, n_coins)?,
             token_decimals: token_decimals.to_vec(),
-            amp: call::<_, ICurve::ACall, _>(engine, pool, ICurve::ACall {})?,
-            fee: Some(call::<_, ICurve::feeCall, _>(engine, pool, ICurve::feeCall {})?),
+            amp: call(engine, pool, ICurve::ACall {})?,
+            fee: Some(call(engine, pool, ICurve::feeCall {})?),
             ..Default::default()
         },
         CurveVariant::StableSwapV1 => RawPoolState {
             variant,
             balances: read_balances(engine, pool, n_coins)?,
             token_decimals: token_decimals.to_vec(),
-            amp: call::<_, ICurve::ACall, _>(engine, pool, ICurve::ACall {})?,
-            fee: Some(call::<_, ICurve::feeCall, _>(engine, pool, ICurve::feeCall {})?),
+            amp: call(engine, pool, ICurve::ACall {})?,
+            fee: Some(call(engine, pool, ICurve::feeCall {})?),
             ..Default::default()
         },
         CurveVariant::StableSwapV2 | CurveVariant::StableSwapSTETH => RawPoolState {
@@ -115,7 +115,7 @@ where
             balances: read_balances(engine, pool, n_coins)?,
             token_decimals: token_decimals.to_vec(),
             amp: read_ramped_amp(engine, pool)?,
-            fee: Some(call::<_, ICurve::feeCall, _>(engine, pool, ICurve::feeCall {})?),
+            fee: Some(call(engine, pool, ICurve::feeCall {})?),
             ..Default::default()
         },
         CurveVariant::StableSwapALend => RawPoolState {
@@ -123,12 +123,8 @@ where
             balances: read_balances(engine, pool, n_coins)?,
             token_decimals: token_decimals.to_vec(),
             amp: read_ramped_amp(engine, pool)?,
-            fee: Some(call::<_, ICurve::feeCall, _>(engine, pool, ICurve::feeCall {})?),
-            offpeg_fee_multiplier: Some(call::<_, ICurve::offpeg_fee_multiplierCall, _>(
-                engine,
-                pool,
-                ICurve::offpeg_fee_multiplierCall {},
-            )?),
+            fee: Some(call(engine, pool, ICurve::feeCall {})?),
+            offpeg_fee_multiplier: Some(call(engine, pool, ICurve::offpeg_fee_multiplierCall {})?),
             ..Default::default()
         },
         CurveVariant::StableSwapNG => RawPoolState {
@@ -136,13 +132,9 @@ where
             balances: read_balances(engine, pool, n_coins)?,
             token_decimals: token_decimals.to_vec(),
             amp: read_ramped_amp(engine, pool)?,
-            fee: Some(call::<_, ICurve::feeCall, _>(engine, pool, ICurve::feeCall {})?),
+            fee: Some(call(engine, pool, ICurve::feeCall {})?),
             // v5+ crvUSD factory pools lack offpeg_fee_multiplier; build_pool defaults it.
-            offpeg_fee_multiplier: call_opt::<_, ICurve::offpeg_fee_multiplierCall, _>(
-                engine,
-                pool,
-                ICurve::offpeg_fee_multiplierCall {},
-            ),
+            offpeg_fee_multiplier: call_opt(engine, pool, ICurve::offpeg_fee_multiplierCall {}),
             dynamic_rates: read_stored_rates(engine, pool, n_coins),
             ..Default::default()
         },
@@ -156,7 +148,7 @@ where
                 balances: read_balances(engine, pool, n_coins)?,
                 token_decimals: token_decimals.to_vec(),
                 amp: read_ramped_amp(engine, pool)?,
-                fee: Some(call::<_, ICurve::feeCall, _>(engine, pool, ICurve::feeCall {})?),
+                fee: Some(call(engine, pool, ICurve::feeCall {})?),
                 dynamic_rates: Some(dynamic_rates),
                 ..Default::default()
             }
@@ -184,15 +176,12 @@ where
     <D as EngineDatabaseInterface>::Error: Debug,
 {
     let balances = read_balances(engine, pool, 2)?;
-    let price_scale =
-        call::<_, ICurve::price_scaleCall, _>(engine, pool, ICurve::price_scaleCall {})?;
-    let precisions =
-        call_opt::<_, ICurveTwo::precisionsCall, _>(engine, pool, ICurveTwo::precisionsCall {})
-            .map(|p| p.to_vec());
+    let price_scale = call(engine, pool, ICurve::price_scaleCall {})?;
+    let precisions = call_opt(engine, pool, ICurveTwo::precisionsCall {}).map(|p| p.to_vec());
     let gamma = if variant == CurveVariant::TwoCryptoStable {
         None
     } else {
-        Some(call::<_, ICurve::gammaCall, _>(engine, pool, ICurve::gammaCall {})?)
+        Some(call(engine, pool, ICurve::gammaCall {})?)
     };
     let eth_variant =
         if variant == CurveVariant::TwoCryptoV1 { Some(detect_eth_variant(*pool)) } else { None };
@@ -200,15 +189,11 @@ where
         variant,
         balances,
         token_decimals: token_decimals.to_vec(),
-        amp: call::<_, ICurve::ACall, _>(engine, pool, ICurve::ACall {})?,
-        mid_fee: Some(call::<_, ICurve::mid_feeCall, _>(engine, pool, ICurve::mid_feeCall {})?),
-        out_fee: Some(call::<_, ICurve::out_feeCall, _>(engine, pool, ICurve::out_feeCall {})?),
-        fee_gamma: Some(call::<_, ICurve::fee_gammaCall, _>(
-            engine,
-            pool,
-            ICurve::fee_gammaCall {},
-        )?),
-        d: Some(call::<_, ICurve::DCall, _>(engine, pool, ICurve::DCall {})?),
+        amp: call(engine, pool, ICurve::ACall {})?,
+        mid_fee: Some(call(engine, pool, ICurve::mid_feeCall {})?),
+        out_fee: Some(call(engine, pool, ICurve::out_feeCall {})?),
+        fee_gamma: Some(call(engine, pool, ICurve::fee_gammaCall {})?),
+        d: Some(call(engine, pool, ICurve::DCall {})?),
         gamma,
         price_scale: Some(vec![price_scale]),
         precisions,
@@ -228,33 +213,19 @@ where
     <D as EngineDatabaseInterface>::Error: Debug,
 {
     let balances = read_balances(engine, pool, 3)?;
-    let ps0 = call::<_, ICurveTri::price_scaleCall, _>(
-        engine,
-        pool,
-        ICurveTri::price_scaleCall { i: U256::from(0) },
-    )?;
-    let ps1 = call::<_, ICurveTri::price_scaleCall, _>(
-        engine,
-        pool,
-        ICurveTri::price_scaleCall { i: U256::from(1) },
-    )?;
-    let precisions =
-        call_opt::<_, ICurveTri::precisionsCall, _>(engine, pool, ICurveTri::precisionsCall {})
-            .map(|p| p.to_vec());
+    let ps0 = call(engine, pool, ICurveTri::price_scaleCall { i: U256::from(0) })?;
+    let ps1 = call(engine, pool, ICurveTri::price_scaleCall { i: U256::from(1) })?;
+    let precisions = call_opt(engine, pool, ICurveTri::precisionsCall {}).map(|p| p.to_vec());
     Ok(RawPoolState {
         variant,
         balances,
         token_decimals: token_decimals.to_vec(),
-        amp: call::<_, ICurve::ACall, _>(engine, pool, ICurve::ACall {})?,
-        mid_fee: Some(call::<_, ICurve::mid_feeCall, _>(engine, pool, ICurve::mid_feeCall {})?),
-        out_fee: Some(call::<_, ICurve::out_feeCall, _>(engine, pool, ICurve::out_feeCall {})?),
-        fee_gamma: Some(call::<_, ICurve::fee_gammaCall, _>(
-            engine,
-            pool,
-            ICurve::fee_gammaCall {},
-        )?),
-        d: Some(call::<_, ICurve::DCall, _>(engine, pool, ICurve::DCall {})?),
-        gamma: Some(call::<_, ICurve::gammaCall, _>(engine, pool, ICurve::gammaCall {})?),
+        amp: call(engine, pool, ICurve::ACall {})?,
+        mid_fee: Some(call(engine, pool, ICurve::mid_feeCall {})?),
+        out_fee: Some(call(engine, pool, ICurve::out_feeCall {})?),
+        fee_gamma: Some(call(engine, pool, ICurve::fee_gammaCall {})?),
+        d: Some(call(engine, pool, ICurve::DCall {})?),
+        gamma: Some(call(engine, pool, ICurve::gammaCall {})?),
         price_scale: Some(vec![ps0, ps1]),
         precisions,
         ..Default::default()
@@ -271,14 +242,11 @@ where
     <D as DatabaseRef>::Error: Debug,
     <D as EngineDatabaseInterface>::Error: Debug,
 {
-    let initial_a = call_opt::<_, ICurve::initial_ACall, _>(engine, pool, ICurve::initial_ACall {});
-    let future_a = call_opt::<_, ICurve::future_ACall, _>(engine, pool, ICurve::future_ACall {});
+    let initial_a = call_opt(engine, pool, ICurve::initial_ACall {});
+    let future_a = call_opt(engine, pool, ICurve::future_ACall {});
     match (initial_a, future_a) {
         (Some(ia), Some(fa)) if ia == fa => Ok(ia),
-        _ => {
-            Ok(call::<_, ICurve::ACall, _>(engine, pool, ICurve::ACall {})? *
-                U256::from(A_PRECISION))
-        }
+        _ => Ok(call(engine, pool, ICurve::ACall {})? * U256::from(A_PRECISION)),
     }
 }
 
@@ -293,11 +261,7 @@ where
 {
     let mut balances = Vec::with_capacity(n_coins);
     for i in 0..n_coins {
-        balances.push(call::<_, ICurve::balancesCall, _>(
-            engine,
-            pool,
-            ICurve::balancesCall { i: U256::from(i) },
-        )?);
+        balances.push(call(engine, pool, ICurve::balancesCall { i: U256::from(i) })?);
     }
     Ok(balances)
 }
@@ -313,11 +277,7 @@ where
 {
     let mut balances = Vec::with_capacity(n_coins);
     for i in 0..n_coins {
-        balances.push(call::<_, ICurveOld::balancesCall, _>(
-            engine,
-            pool,
-            ICurveOld::balancesCall { i: i as i128 },
-        )?);
+        balances.push(call(engine, pool, ICurveOld::balancesCall { i: i as i128 })?);
     }
     Ok(balances)
 }
@@ -331,12 +291,8 @@ where
     <D as DatabaseRef>::Error: Debug,
     <D as EngineDatabaseInterface>::Error: Debug,
 {
-    let base_pool = call::<_, ICurve::base_poolCall, _>(engine, pool, ICurve::base_poolCall {})?;
-    call::<_, IBasePool::get_virtual_priceCall, _>(
-        engine,
-        &base_pool,
-        IBasePool::get_virtual_priceCall {},
-    )
+    let base_pool = call(engine, pool, ICurve::base_poolCall {})?;
+    call(engine, &base_pool, IBasePool::get_virtual_priceCall {})
 }
 
 /// Read `stored_rates()` as `dynamic_rates`, handling both fixed-size and dynamic ABI encodings.
@@ -379,7 +335,7 @@ where
     <D as DatabaseRef>::Error: Debug,
     <D as EngineDatabaseInterface>::Error: Debug,
 {
-    call_opt::<_, ICurve::MATHCall, _>(engine, pool, ICurve::MATHCall {})
+    call_opt(engine, pool, ICurve::MATHCall {})
 }
 
 /// Ensure the code of the pool's actual `MATH()` contract is loaded into the engine.
@@ -421,7 +377,9 @@ where
             false,
         )
         .map_err(|e| {
-            SimulationError::FatalError(format!("curve: failed to load MATH() code for {math}: {e:?}"))
+            SimulationError::FatalError(format!(
+                "curve: failed to load MATH() code for {math}: {e:?}"
+            ))
         })?;
     Ok(())
 }
@@ -435,7 +393,7 @@ where
     <D as DatabaseRef>::Error: Debug,
     <D as EngineDatabaseInterface>::Error: Debug,
 {
-    call_opt::<_, ICurve::versionCall, _>(engine, address, ICurve::versionCall {})
+    call_opt(engine, address, ICurve::versionCall {})
 }
 
 /// Probe the pool's on-chain interface to populate [`ProbingResults`] for variant detection.
@@ -452,34 +410,18 @@ where
     <D as EngineDatabaseInterface>::Error: Debug,
 {
     ProbingResults {
-        has_gamma: call_opt::<_, ICurve::gammaCall, _>(engine, pool, ICurve::gammaCall {})
-            .is_some(),
+        has_gamma: call_opt(engine, pool, ICurve::gammaCall {}).is_some(),
         n_coins,
         has_math: read_math_address(engine, pool).is_some(),
         // Read `MATH().version()` so `detect_variant` can split TwoCrypto NG (v2.x) from
         // TwoCryptoStable (v0.x) on the probe fallback path, matching `resolve_twocrypto`.
         math_version: read_math_address(engine, pool).and_then(|math| read_version(engine, &math)),
-        has_offpeg_fee_multiplier: call_opt::<_, ICurve::offpeg_fee_multiplierCall, _>(
-            engine,
-            pool,
-            ICurve::offpeg_fee_multiplierCall {},
-        )
-        .is_some(),
-        has_stored_rates: read_stored_rates(engine, pool, n_coins).is_some(),
-        has_version: call_opt::<_, ICurve::versionCall, _>(engine, pool, ICurve::versionCall {})
+        has_offpeg_fee_multiplier: call_opt(engine, pool, ICurve::offpeg_fee_multiplierCall {})
             .is_some(),
-        has_base_pool: call_opt::<_, ICurve::base_poolCall, _>(
-            engine,
-            pool,
-            ICurve::base_poolCall {},
-        )
-        .is_some(),
-        has_int128_balances: call_opt::<_, ICurveOld::balancesCall, _>(
-            engine,
-            pool,
-            ICurveOld::balancesCall { i: 0 },
-        )
-        .is_some(),
+        has_stored_rates: read_stored_rates(engine, pool, n_coins).is_some(),
+        has_version: call_opt(engine, pool, ICurve::versionCall {}).is_some(),
+        has_base_pool: call_opt(engine, pool, ICurve::base_poolCall {}).is_some(),
+        has_int128_balances: call_opt(engine, pool, ICurveOld::balancesCall { i: 0 }).is_some(),
         pool_address: *pool,
     }
 }
