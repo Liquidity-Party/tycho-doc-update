@@ -403,6 +403,45 @@ impl Inner {
     }
 }
 
+/// Builds the WebSocket handshake request, including the optional auth and client-metadata
+/// headers. The metadata value is pre-validated by the serializer, so `.header()` cannot fail on
+/// it. `User-Agent` is always `tycho-client-{version}`.
+fn build_ws_handshake_request(
+    ws_uri: &str,
+    uri: &Uri,
+    auth_key: Option<&str>,
+    client_metadata_header: Option<&str>,
+) -> Result<Request, DeltasError> {
+    let mut request_builder = Request::builder()
+        .uri(ws_uri)
+        .header(SEC_WEBSOCKET_KEY, generate_key())
+        .header(SEC_WEBSOCKET_VERSION, 13)
+        .header(CONNECTION, "Upgrade")
+        .header(UPGRADE, "websocket")
+        .header(
+            HOST,
+            uri.host().ok_or_else(|| {
+                DeltasError::UriParsing(
+                    ws_uri.to_string(),
+                    "No host found in tycho url".to_string(),
+                )
+            })?,
+        )
+        .header(USER_AGENT, format!("tycho-client-{version}", version = env!("CARGO_PKG_VERSION")));
+
+    if let Some(key) = auth_key {
+        request_builder = request_builder.header(AUTHORIZATION, key);
+    }
+    if let Some(meta) = client_metadata_header {
+        request_builder =
+            request_builder.header(crate::client_metadata::CLIENT_METADATA_HEADER, meta);
+    }
+
+    request_builder.body(()).map_err(|e| {
+        DeltasError::TransportError(format!("Failed to build connection request: {e}"))
+    })
+}
+
 /// Tycho client websocket implementation.
 impl WsDeltasClient {
     // Construct a new client with 5 reconnection attempts.
@@ -878,42 +917,12 @@ impl DeltasClient for WsDeltasClient {
                     sleep(this.retry_cooldown).await;
                 }
 
-                // Create a WebSocket request
-                let mut request_builder = Request::builder()
-                    .uri(&ws_uri)
-                    .header(SEC_WEBSOCKET_KEY, generate_key())
-                    .header(SEC_WEBSOCKET_VERSION, 13)
-                    .header(CONNECTION, "Upgrade")
-                    .header(UPGRADE, "websocket")
-                    .header(
-                        HOST,
-                        this.uri.host().ok_or_else(|| {
-                            DeltasError::UriParsing(
-                                ws_uri.clone(),
-                                "No host found in tycho url".to_string(),
-                            )
-                        })?,
-                    )
-                    .header(
-                        USER_AGENT,
-                        format!("tycho-client-{version}", version = env!("CARGO_PKG_VERSION")),
-                    );
-
-                // Add Authorization if one is given
-                if let Some(ref key) = this.auth_key {
-                    request_builder = request_builder.header(AUTHORIZATION, key);
-                }
-
-                // Add generic client metadata if one is given. Value is pre-validated by the
-                // serializer, so `.header()` cannot fail on it.
-                if let Some(ref meta) = this.client_metadata_header {
-                    request_builder = request_builder
-                        .header(crate::client_metadata::CLIENT_METADATA_HEADER, meta);
-                }
-
-                let request = request_builder.body(()).map_err(|e| {
-                    DeltasError::TransportError(format!("Failed to build connection request: {e}"))
-                })?;
+                let request = build_ws_handshake_request(
+                    &ws_uri,
+                    &this.uri,
+                    this.auth_key.as_deref(),
+                    this.client_metadata_header.as_deref(),
+                )?;
                 let (conn, _) = match connect_async(request).await {
                     Ok(conn) => conn,
                     Err(e) => {
@@ -1264,75 +1273,46 @@ mod tests {
         .replace(|c: char| c.is_whitespace(), "")
     }
 
-    /// Starts a minimal WS server that captures the handshake request headers, connects a client
-    /// with the given metadata, and returns the headers the server saw.
-    // The callback's Result type is dictated by tungstenite's Callback trait.
-    #[allow(clippy::result_large_err)]
-    async fn capture_handshake_headers(
-        client_metadata: Option<String>,
-    ) -> tungstenite::http::HeaderMap {
-        use tokio::sync::oneshot;
-        use tungstenite::handshake::server::{
-            ErrorResponse, Request as SrvRequest, Response as SrvResponse,
-        };
-
-        let listener = TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("bind failed");
-        let addr = listener.local_addr().unwrap();
-        let (tx, rx) = oneshot::channel();
-
-        let server = tokio::spawn(async move {
-            let (stream, _) = listener.accept().await.unwrap();
-            let callback =
-                move |req: &SrvRequest, resp: SrvResponse| -> Result<SrvResponse, ErrorResponse> {
-                    let _ = tx.send(req.headers().clone());
-                    Ok(resp)
-                };
-            let _ws = tokio_tungstenite::accept_hdr_async(stream, callback)
-                .await
-                .unwrap();
-            sleep(Duration::from_millis(100)).await;
-        });
-
-        let mut client =
-            WsDeltasClient::new_with_reconnects(&format!("ws://{addr}"), None, 1, Duration::ZERO)
-                .unwrap();
-        client = client.with_client_metadata_header(client_metadata);
-        let _jh = client.connect().await.unwrap();
-
-        let headers = timeout(Duration::from_millis(500), rx)
-            .await
-            .expect("handshake timeout")
-            .expect("headers channel closed");
-        let _ = client.close().await;
-        server.abort();
-        headers
-    }
-
-    #[tokio::test]
-    async fn test_ws_handshake_sends_client_metadata_when_set() {
-        let headers = capture_handshake_headers(Some("fynd_version=0.57.0".to_string())).await;
+    #[test]
+    fn test_ws_handshake_sends_client_metadata_when_set() {
+        let uri = Uri::from_str("ws://localhost:4242/").unwrap();
+        let request = build_ws_handshake_request(
+            "ws://localhost:4242/v1/ws",
+            &uri,
+            None,
+            Some("fynd_version=0.57.0"),
+        )
+        .unwrap();
         assert_eq!(
-            headers
+            request
+                .headers()
                 .get(crate::client_metadata::CLIENT_METADATA_HEADER)
-                .map(|v| v.to_str().unwrap().to_string()),
-            Some("fynd_version=0.57.0".to_string())
+                .map(|v| v.to_str().unwrap()),
+            Some("fynd_version=0.57.0")
         );
         assert_eq!(
-            headers.get(USER_AGENT).unwrap(),
+            request
+                .headers()
+                .get(USER_AGENT)
+                .unwrap(),
             format!("tycho-client-{}", env!("CARGO_PKG_VERSION")).as_str()
         );
     }
 
-    #[tokio::test]
-    async fn test_ws_handshake_omits_client_metadata_when_unset() {
-        let headers = capture_handshake_headers(None).await;
-        assert!(headers
+    #[test]
+    fn test_ws_handshake_omits_client_metadata_when_unset() {
+        let uri = Uri::from_str("ws://localhost:4242/").unwrap();
+        let request =
+            build_ws_handshake_request("ws://localhost:4242/v1/ws", &uri, None, None).unwrap();
+        assert!(request
+            .headers()
             .get(crate::client_metadata::CLIENT_METADATA_HEADER)
             .is_none());
         assert_eq!(
-            headers.get(USER_AGENT).unwrap(),
+            request
+                .headers()
+                .get(USER_AGENT)
+                .unwrap(),
             format!("tycho-client-{}", env!("CARGO_PKG_VERSION")).as_str()
         );
     }
