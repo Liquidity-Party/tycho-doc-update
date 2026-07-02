@@ -14,6 +14,7 @@ use tycho_common::{
 };
 
 use crate::{
+    client_metadata::serialize_client_metadata,
     deltas::DeltasClient,
     feed::{
         component_tracker::ComponentFilter, synchronizer::ProtocolStateSynchronizer, BlockHeader,
@@ -286,9 +287,8 @@ impl TychoStreamBuilder {
         }
 
         // Serialize client metadata once, before any network I/O, so invalid input fails fast.
-        let metadata_header =
-            crate::client_metadata::serialize_client_metadata(&self.client_metadata)
-                .map_err(|e| StreamError::SetUpError(format!("Invalid client metadata: {e}")))?;
+        let metadata_header = serialize_client_metadata(&self.client_metadata)
+            .map_err(|e| StreamError::SetUpError(format!("Invalid client metadata: {e}")))?;
 
         // Attempt to read the authentication key from the environment variable if not provided
         let auth_key = self

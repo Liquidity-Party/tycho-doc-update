@@ -139,6 +139,7 @@ where
 }
 
 use crate::{
+    client_metadata::CLIENT_METADATA_HEADER,
     feed::synchronizer::{ComponentWithState, Snapshot},
     TYCHO_SERVER_VERSION,
 };
@@ -1310,10 +1311,7 @@ impl HttpRPCClient {
             let value = header::HeaderValue::from_str(metadata).map_err(|e| {
                 RPCError::FormatRequest(format!("Invalid client metadata format: {e}"))
             })?;
-            headers.insert(
-                header::HeaderName::from_static(crate::client_metadata::CLIENT_METADATA_HEADER),
-                value,
-            );
+            headers.insert(header::HeaderName::from_static(CLIENT_METADATA_HEADER), value);
         }
 
         let mut client_builder = ClientBuilder::new()
@@ -2126,10 +2124,7 @@ mod tests {
         let expected_ua = format!("tycho-client-{}", env!("CARGO_PKG_VERSION"));
         let mock = server
             .mock("POST", "/v1/contract_state")
-            .match_header(
-                crate::client_metadata::CLIENT_METADATA_HEADER,
-                "fynd_version=0.57.0; preset=best",
-            )
+            .match_header(CLIENT_METADATA_HEADER, "fynd_version=0.57.0; preset=best")
             .match_header("user-agent", expected_ua.as_str())
             .with_body(GET_CONTRACT_STATE_RESP)
             .expect(1)
@@ -2157,7 +2152,7 @@ mod tests {
         let expected_ua = format!("tycho-client-{}", env!("CARGO_PKG_VERSION"));
         let mock = server
             .mock("POST", "/v1/contract_state")
-            .match_header(crate::client_metadata::CLIENT_METADATA_HEADER, mockito::Matcher::Missing)
+            .match_header(CLIENT_METADATA_HEADER, mockito::Matcher::Missing)
             .match_header("user-agent", expected_ua.as_str())
             .with_body(GET_CONTRACT_STATE_RESP)
             .expect(1)

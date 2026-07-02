@@ -65,7 +65,7 @@ use tycho_common::{
 use uuid::Uuid;
 use zstd;
 
-use crate::TYCHO_SERVER_VERSION;
+use crate::{client_metadata::CLIENT_METADATA_HEADER, TYCHO_SERVER_VERSION};
 
 #[derive(Error, Debug)]
 pub enum DeltasError {
@@ -433,8 +433,7 @@ fn build_ws_handshake_request(
         request_builder = request_builder.header(AUTHORIZATION, key);
     }
     if let Some(meta) = client_metadata_header {
-        request_builder =
-            request_builder.header(crate::client_metadata::CLIENT_METADATA_HEADER, meta);
+        request_builder = request_builder.header(CLIENT_METADATA_HEADER, meta);
     }
 
     request_builder.body(()).map_err(|e| {
@@ -1286,7 +1285,7 @@ mod tests {
         assert_eq!(
             request
                 .headers()
-                .get(crate::client_metadata::CLIENT_METADATA_HEADER)
+                .get(CLIENT_METADATA_HEADER)
                 .map(|v| v.to_str().unwrap()),
             Some("fynd_version=0.57.0")
         );
@@ -1306,7 +1305,7 @@ mod tests {
             build_ws_handshake_request("ws://localhost:4242/v1/ws", &uri, None, None).unwrap();
         assert!(request
             .headers()
-            .get(crate::client_metadata::CLIENT_METADATA_HEADER)
+            .get(CLIENT_METADATA_HEADER)
             .is_none());
         assert_eq!(
             request
