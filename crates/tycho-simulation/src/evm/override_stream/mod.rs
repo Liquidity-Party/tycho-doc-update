@@ -30,9 +30,9 @@ use tokio::sync::watch;
 
 /// Resolved per-block VM overrides for a single protocol at a point in time.
 ///
-/// `block_number` and `block_timestamp` are already resolved by the provider (e.g. Titan computes
-/// `block_timestamp` from lane timestamps) so this core stays protocol-agnostic. Either field may
-/// be `None`, in which case the pool's existing block environment is left intact.
+/// `block_number` and `block_timestamp` are already resolved by the provider (e.g. Titan derives
+/// `block_timestamp` from the frame's beacon slot) so this core stays protocol-agnostic. Either
+/// field may be `None`, in which case the pool's existing block environment is left intact.
 #[derive(Clone, Default, Debug)]
 pub struct OverrideSnapshot {
     /// The L1 block number these overrides apply to, if known.
