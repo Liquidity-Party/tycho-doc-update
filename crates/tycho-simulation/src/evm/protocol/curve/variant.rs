@@ -37,6 +37,25 @@ const POOL_STETH: AlloyAddress = address!("dc24316b9ae028f1497c275eb9192a3ea0f67
 const POOL_TRICRYPTO2: AlloyAddress = address!("d51a44d3fae010294c616388b506acda1bfaae46");
 const POOL_FRAXUSDC: AlloyAddress = address!("dcef968d416a41cdac0ed8702fac8128a64241a2");
 
+/// Factories that deploy a single, unambiguous math variant. The TwoCrypto factory is intentionally
+/// absent (NG vs Stable needs the MATH contract — see [`resolve_twocrypto`]), as are unknown
+/// factories (resolved by on-chain probing).
+const FACTORY_VARIANTS: &[(AlloyAddress, CurveVariant)] = &[
+    (CRYPTO_POOL_FACTORY, CurveVariant::TwoCryptoV1),
+    (CRYPTO_SWAP_NG_FACTORY, CurveVariant::StableSwapNG),
+    (STABLESWAP_FACTORY, CurveVariant::StableSwapNG),
+    (META_POOL_FACTORY, CurveVariant::StableSwapV2),
+    (TRICRYPTO_FACTORY, CurveVariant::TriCryptoNG),
+];
+
+/// Legacy pools deployed without a recognised factory, mapped to their known math variant.
+const LEGACY_POOL_VARIANTS: &[(AlloyAddress, CurveVariant)] = &[
+    (POOL_3POOL, CurveVariant::StableSwapV1),
+    (POOL_STETH, CurveVariant::StableSwapSTETH),
+    (POOL_TRICRYPTO2, CurveVariant::TriCryptoV1),
+    (POOL_FRAXUSDC, CurveVariant::StableSwapV2),
+];
+
 /// Resolve the variant for `pool` from `static_attributes`, probing on-chain only when needed.
 ///
 /// Returns the matched [`CurveVariant`], or a [`SimulationError`] if probing fails to classify the
@@ -69,15 +88,10 @@ where
 /// Returns `None` for the TwoCrypto factory (NG vs Stable needs the MATH contract) and unknown
 /// factories (require on-chain probing).
 fn factory_variant(factory: AlloyAddress) -> Option<CurveVariant> {
-    match factory {
-        f if f == CRYPTO_POOL_FACTORY => Some(CurveVariant::TwoCryptoV1),
-        f if f == CRYPTO_SWAP_NG_FACTORY || f == STABLESWAP_FACTORY => {
-            Some(CurveVariant::StableSwapNG)
-        }
-        f if f == META_POOL_FACTORY => Some(CurveVariant::StableSwapV2),
-        f if f == TRICRYPTO_FACTORY => Some(CurveVariant::TriCryptoNG),
-        _ => None,
-    }
+    FACTORY_VARIANTS
+        .iter()
+        .find(|(addr, _)| *addr == factory)
+        .map(|(_, variant)| *variant)
 }
 
 /// TwoCrypto factory pools split by their MATH contract: `v0.x` MATH is StableSwap math
@@ -118,17 +132,11 @@ where
     <D as DatabaseRef>::Error: Debug,
     <D as EngineDatabaseInterface>::Error: Debug,
 {
-    if *pool == POOL_3POOL {
-        return Ok(CurveVariant::StableSwapV1);
-    }
-    if *pool == POOL_STETH {
-        return Ok(CurveVariant::StableSwapSTETH);
-    }
-    if *pool == POOL_TRICRYPTO2 {
-        return Ok(CurveVariant::TriCryptoV1);
-    }
-    if *pool == POOL_FRAXUSDC {
-        return Ok(CurveVariant::StableSwapV2);
+    if let Some((_, variant)) = LEGACY_POOL_VARIANTS
+        .iter()
+        .find(|(addr, _)| addr == pool)
+    {
+        return Ok(*variant);
     }
     let probing = vm::probe(engine, pool, n_coins);
     detect_variant(&probing)
