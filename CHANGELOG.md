@@ -1,3 +1,11 @@
+## [0.320.4](https://github.com/propeller-heads/tycho/compare/0.320.3...0.320.4) (2026-07-02)
+
+
+### Bug Fixes
+
+* update image tag description ([5cb5f40](https://github.com/propeller-heads/tycho/commit/5cb5f400a2325a51db7ebb750b9c31752cbc2e9d))
+* update image tag description ([#1149](https://github.com/propeller-heads/tycho/issues/1149)) ([6142405](https://github.com/propeller-heads/tycho/commit/6142405ac30fec246d7b4039133ce579eac3dff0))
+
 ## [0.320.3](https://github.com/propeller-heads/tycho/compare/0.320.2...0.320.3) (2026-07-02)
 
 ## [0.320.2](https://github.com/propeller-heads/tycho/compare/0.320.1...0.320.2) (2026-07-01)
