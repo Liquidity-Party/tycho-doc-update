@@ -1,3 +1,13 @@
+## [0.320.3](https://github.com/propeller-heads/tycho/compare/0.320.2...0.320.3) (2026-07-02)
+
+## [0.320.2](https://github.com/propeller-heads/tycho/compare/0.320.1...0.320.2) (2026-07-01)
+
+
+### Bug Fixes
+
+* retry on lagging RPC in integration test validation ([1defd19](https://github.com/propeller-heads/tycho/commit/1defd1941da3ca2764eb35fc82a646720872b590))
+* retry on lagging RPC in integration test validation ([#1146](https://github.com/propeller-heads/tycho/issues/1146)) ([405ed88](https://github.com/propeller-heads/tycho/commit/405ed8863bb99a84871c9d0207b7a4683c56b9fd))
+
 ## [0.320.1](https://github.com/propeller-heads/tycho/compare/0.320.0...0.320.1) (2026-06-30)
 
 
