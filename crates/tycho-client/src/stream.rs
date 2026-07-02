@@ -194,14 +194,20 @@ impl TychoStreamBuilder {
     /// Sets the client metadata sent to the server in the `X-Tycho-Client-Metadata` header.
     ///
     /// The map is opaque to tycho-client; consumers supply their own keys. Replaces any
-    /// previously set metadata. An empty map sends no header. Invalid keys/values are rejected
-    /// at `build()` time.
+    /// previously set metadata. An empty map sends no header. Invalid keys/values and oversized
+    /// metadata are rejected at `build()` time.
+    ///
+    /// Values are self-reported and may surface in the server's metrics and logs. Do not include
+    /// secrets or personally identifiable information.
     pub fn client_metadata(mut self, metadata: BTreeMap<String, String>) -> Self {
         self.client_metadata = metadata;
         self
     }
 
     /// Adds a single client-metadata entry, keeping any previously set entries.
+    ///
+    /// Values are self-reported and may surface in the server's metrics and logs. Do not include
+    /// secrets or personally identifiable information.
     pub fn client_metadata_entry(
         mut self,
         key: impl Into<String>,
