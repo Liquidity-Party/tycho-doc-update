@@ -246,6 +246,12 @@ where
     let future_a = call_opt(engine, pool, ICurve::future_ACall {});
     match (initial_a, future_a) {
         (Some(ia), Some(fa)) if ia == fa => Ok(ia),
+        // While ramping we read `A()`, which the pool interpolates to the read block. The adapter
+        // docs suggest instead interpolating `initial_A`/`future_A` and calling `Pool::set_amp`
+        // per quote — but the pool has no access to the current block timestamp outside
+        // `delta_transition`, so per-quote interpolation isn't feasible yet. `A()` is refreshed on
+        // every `delta_transition` (i.e. on every swap), and ramps span days, so intra-interval
+        // drift is negligible. Revisit if the pool gains access to the block timestamp.
         _ => Ok(call(engine, pool, ICurve::ACall {})? * U256::from(A_PRECISION)),
     }
 }
