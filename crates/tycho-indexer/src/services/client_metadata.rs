@@ -1,0 +1,210 @@
+//! Server-side parsing of the generic `X-Tycho-Client-Metadata` header.
+//!
+//! Clients send an opaque `key=value; key=value` map. The server parses it generically, applies
+//! defensive size caps (never trusting the client to have validated), and projects a small
+//! allowlist of keys into Prometheus labels. Because label *values* are client-controlled, each
+//! allowlisted key has a per-key validator that collapses unexpected input to a bounded token, so
+//! a malicious client cannot inflate metric cardinality.
+//!
+//! This mirrors the client serializer in `tycho-client` but deliberately does not depend on that
+//! crate, so the two can ship independently.
+
+use std::collections::BTreeMap;
+
+use metrics::Label;
+
+/// Header carrying generic client metadata.
+pub(in crate::services) const CLIENT_METADATA_HEADER: &str = "x-tycho-client-metadata";
+
+/// Allowlisted metadata keys promoted to Prometheus labels. Adding a key multiplies series count.
+pub(in crate::services) const METADATA_METRIC_KEYS: &[&str] = &["fynd_version", "preset"];
+
+/// Known Fynd presets; any other `preset` value collapses to `"other"`.
+const KNOWN_PRESETS: &[&str] = &["best", "fast", "deep", "none"];
+
+// Defensive caps mirroring the client serializer (by value, not by crate dependency).
+const MAX_ENTRIES: usize = 16;
+const MAX_KEY_BYTES: usize = 64;
+const MAX_VALUE_BYTES: usize = 128;
+const MAX_HEADER_BYTES: usize = 1024;
+
+/// Parses the raw header into a metadata map, applying defensive caps. Oversized input is dropped
+/// rather than trusted: a header over the total-length cap yields an empty map, and individual
+/// pairs over the key/value caps or beyond the entry cap are skipped.
+pub(in crate::services) fn parse_client_metadata(raw: &str) -> BTreeMap<String, String> {
+    let mut out = BTreeMap::new();
+    if raw.len() > MAX_HEADER_BYTES {
+        return out;
+    }
+    for pair in raw.split(';') {
+        if out.len() >= MAX_ENTRIES {
+            break;
+        }
+        let Some((key, value)) = pair.split_once('=') else {
+            continue;
+        };
+        let key = key.trim();
+        let value = value.trim();
+        if key.is_empty() || value.is_empty() {
+            continue;
+        }
+        if key.len() > MAX_KEY_BYTES || value.len() > MAX_VALUE_BYTES {
+            continue;
+        }
+        out.insert(key.to_string(), value.to_string());
+    }
+    out
+}
+
+/// Builds the bounded Prometheus labels for every allowlisted metadata key, in allowlist order.
+/// Missing keys yield `"none"`; present values are validated per key and collapsed to
+/// `"other"`/`"invalid"` when they don't match, so client-controlled strings can never inflate
+/// label cardinality. Non-allowlisted keys are never emitted.
+pub(in crate::services) fn metric_labels(metadata: &BTreeMap<String, String>) -> Vec<Label> {
+    METADATA_METRIC_KEYS
+        .iter()
+        .map(|&key| Label::new(key, label_value(key, metadata.get(key).map(String::as_str))))
+        .collect()
+}
+
+fn label_value(key: &str, value: Option<&str>) -> String {
+    let Some(value) = value else {
+        return "none".to_string();
+    };
+    match key {
+        "preset" => {
+            if KNOWN_PRESETS.contains(&value) {
+                value.to_string()
+            } else {
+                "other".to_string()
+            }
+        }
+        "fynd_version" => {
+            if is_version_prefix(value) {
+                value.to_string()
+            } else {
+                "invalid".to_string()
+            }
+        }
+        _ => "invalid".to_string(),
+    }
+}
+
+/// Returns true if `value` starts with `MAJOR.MINOR.PATCH` (each numeric), matching
+/// `^[0-9]+\.[0-9]+\.[0-9]+`.
+fn is_version_prefix(value: &str) -> bool {
+    let mut rest = value;
+    for i in 0..3 {
+        let digits = rest
+            .bytes()
+            .take_while(|b| b.is_ascii_digit())
+            .count();
+        if digits == 0 {
+            return false;
+        }
+        rest = &rest[digits..];
+        if i < 2 {
+            match rest.strip_prefix('.') {
+                Some(r) => rest = r,
+                None => return false,
+            }
+        }
+    }
+    true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn labels_map(metadata: &BTreeMap<String, String>) -> BTreeMap<String, String> {
+        metric_labels(metadata)
+            .into_iter()
+            .map(|l| (l.key().to_string(), l.value().to_string()))
+            .collect()
+    }
+
+    fn map(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
+    }
+
+    #[test]
+    fn parses_and_trims_pairs() {
+        let parsed = parse_client_metadata("fynd_version=1.2.3; preset=fast");
+        assert_eq!(parsed, map(&[("fynd_version", "1.2.3"), ("preset", "fast")]));
+    }
+
+    #[test]
+    fn skips_empty_and_malformed_pairs() {
+        let parsed = parse_client_metadata("a=1;; no_equals ;b=;=novalue;c=2");
+        assert_eq!(parsed, map(&[("a", "1"), ("c", "2")]));
+    }
+
+    #[test]
+    fn drops_header_over_total_length_cap() {
+        let raw = format!("k={}", "v".repeat(MAX_HEADER_BYTES));
+        assert!(parse_client_metadata(&raw).is_empty());
+    }
+
+    #[test]
+    fn skips_oversized_key_or_value() {
+        let long_key = "a".repeat(MAX_KEY_BYTES + 1);
+        let long_value = "b".repeat(MAX_VALUE_BYTES + 1);
+        let raw = format!("{long_key}=ok; k={long_value}; good=1");
+        assert_eq!(parse_client_metadata(&raw), map(&[("good", "1")]));
+    }
+
+    #[test]
+    fn caps_entry_count() {
+        let raw = (0..MAX_ENTRIES + 5)
+            .map(|i| format!("k{i}=v"))
+            .collect::<Vec<_>>()
+            .join(";");
+        assert_eq!(parse_client_metadata(&raw).len(), MAX_ENTRIES);
+    }
+
+    #[test]
+    fn labels_default_to_none_when_absent() {
+        let labels = labels_map(&BTreeMap::new());
+        assert_eq!(labels, map(&[("fynd_version", "none"), ("preset", "none")]));
+    }
+
+    #[test]
+    fn labels_pass_through_valid_values() {
+        let labels = labels_map(&map(&[("fynd_version", "0.57.0"), ("preset", "best")]));
+        assert_eq!(labels, map(&[("fynd_version", "0.57.0"), ("preset", "best")]));
+    }
+
+    #[test]
+    fn labels_collapse_unexpected_values() {
+        let labels = labels_map(&map(&[("fynd_version", "not-a-version"), ("preset", "turbo")]));
+        assert_eq!(labels, map(&[("fynd_version", "invalid"), ("preset", "other")]));
+    }
+
+    #[test]
+    fn labels_omit_non_allowlisted_keys() {
+        let labels = labels_map(&map(&[("secret", "abc"), ("preset", "fast")]));
+        assert_eq!(labels, map(&[("fynd_version", "none"), ("preset", "fast")]));
+        assert!(!labels.contains_key("secret"));
+    }
+
+    #[test]
+    fn version_prefix_accepts_major_minor_patch() {
+        assert!(is_version_prefix("1.2.3"));
+        assert!(is_version_prefix("0.57.0"));
+        assert!(is_version_prefix("1.2.3-rc1"));
+        assert!(is_version_prefix("10.20.30.40"));
+    }
+
+    #[test]
+    fn version_prefix_rejects_non_semver() {
+        assert!(!is_version_prefix("1.2"));
+        assert!(!is_version_prefix("1.2.x"));
+        assert!(!is_version_prefix("v1.2.3"));
+        assert!(!is_version_prefix(""));
+        assert!(!is_version_prefix("abc"));
+    }
+}
