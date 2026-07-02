@@ -192,6 +192,8 @@ pub struct WsDeltasClient {
     inner: Arc<Mutex<Option<Inner>>>,
     /// If set the client has exhausted its reconnection attempts
     dead: Arc<AtomicBool>,
+    /// Pre-serialized `X-Tycho-Client-Metadata` header value. `None` sends no header.
+    client_metadata_header: Option<String>,
 }
 
 type WebSocketSink =
@@ -418,6 +420,7 @@ impl WsDeltasClient {
             max_reconnects: 5,
             retry_cooldown: Duration::from_millis(500),
             dead: Arc::new(AtomicBool::new(false)),
+            client_metadata_header: None,
         })
     }
 
@@ -442,7 +445,14 @@ impl WsDeltasClient {
             max_reconnects,
             retry_cooldown,
             dead: Arc::new(AtomicBool::new(false)),
+            client_metadata_header: None,
         })
+    }
+
+    /// Sets the pre-serialized client-metadata header value. `None` sends no header.
+    pub fn with_client_metadata_header(mut self, header: Option<String>) -> Self {
+        self.client_metadata_header = header;
+        self
     }
 
     // Construct a new client with custom buffer sizes (for testing)
@@ -466,6 +476,7 @@ impl WsDeltasClient {
             max_reconnects: 5,
             retry_cooldown: Duration::from_millis(0),
             dead: Arc::new(AtomicBool::new(false)),
+            client_metadata_header: None,
         })
     }
 
@@ -893,6 +904,13 @@ impl DeltasClient for WsDeltasClient {
                     request_builder = request_builder.header(AUTHORIZATION, key);
                 }
 
+                // Add generic client metadata if one is given. Value is pre-validated by the
+                // serializer, so `.header()` cannot fail on it.
+                if let Some(ref meta) = this.client_metadata_header {
+                    request_builder = request_builder
+                        .header(crate::client_metadata::CLIENT_METADATA_HEADER, meta);
+                }
+
                 let request = request_builder.body(()).map_err(|e| {
                     DeltasError::TransportError(format!("Failed to build connection request: {e}"))
                 })?;
@@ -1244,6 +1262,79 @@ mod tests {
         }
         "#
         .replace(|c: char| c.is_whitespace(), "")
+    }
+
+    /// Starts a minimal WS server that captures the handshake request headers, connects a client
+    /// with the given metadata, and returns the headers the server saw.
+    async fn capture_handshake_headers(
+        client_metadata: Option<String>,
+    ) -> tungstenite::http::HeaderMap {
+        use tokio::sync::oneshot;
+        use tungstenite::handshake::server::{
+            ErrorResponse, Request as SrvRequest, Response as SrvResponse,
+        };
+
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind failed");
+        let addr = listener.local_addr().unwrap();
+        let (tx, rx) = oneshot::channel();
+
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let callback = move |req: &SrvRequest, resp: SrvResponse| -> Result<
+                SrvResponse,
+                ErrorResponse,
+            > {
+                let _ = tx.send(req.headers().clone());
+                Ok(resp)
+            };
+            let _ws = tokio_tungstenite::accept_hdr_async(stream, callback)
+                .await
+                .unwrap();
+            sleep(Duration::from_millis(100)).await;
+        });
+
+        let mut client =
+            WsDeltasClient::new_with_reconnects(&format!("ws://{addr}"), None, 1, Duration::ZERO)
+                .unwrap();
+        client = client.with_client_metadata_header(client_metadata);
+        let _jh = client.connect().await.unwrap();
+
+        let headers = timeout(Duration::from_millis(500), rx)
+            .await
+            .expect("handshake timeout")
+            .expect("headers channel closed");
+        let _ = client.close().await;
+        server.abort();
+        headers
+    }
+
+    #[tokio::test]
+    async fn test_ws_handshake_sends_client_metadata_when_set() {
+        let headers = capture_handshake_headers(Some("fynd_version=0.57.0".to_string())).await;
+        assert_eq!(
+            headers
+                .get(crate::client_metadata::CLIENT_METADATA_HEADER)
+                .map(|v| v.to_str().unwrap().to_string()),
+            Some("fynd_version=0.57.0".to_string())
+        );
+        assert_eq!(
+            headers.get(USER_AGENT).unwrap(),
+            format!("tycho-client-{}", env!("CARGO_PKG_VERSION")).as_str()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_ws_handshake_omits_client_metadata_when_unset() {
+        let headers = capture_handshake_headers(None).await;
+        assert!(headers
+            .get(crate::client_metadata::CLIENT_METADATA_HEADER)
+            .is_none());
+        assert_eq!(
+            headers.get(USER_AGENT).unwrap(),
+            format!("tycho-client-{}", env!("CARGO_PKG_VERSION")).as_str()
+        );
     }
 
     #[tokio::test]
