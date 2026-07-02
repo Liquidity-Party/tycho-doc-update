@@ -443,7 +443,9 @@ where
             .is_some(),
         n_coins,
         has_math: read_math_address(engine, pool).is_some(),
-        math_version: None,
+        // Read `MATH().version()` so `detect_variant` can split TwoCrypto NG (v2.x) from
+        // TwoCryptoStable (v0.x) on the probe fallback path, matching `resolve_twocrypto`.
+        math_version: read_math_address(engine, pool).and_then(|math| read_version(engine, &math)),
         has_offpeg_fee_multiplier: call_opt::<_, ICurve::offpeg_fee_multiplierCall, _>(
             engine,
             pool,
