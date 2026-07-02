@@ -1,6 +1,6 @@
 use std::{
     cmp::max,
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     env,
     time::Duration,
 };
@@ -71,6 +71,7 @@ pub struct TychoStreamBuilder {
     compression: bool,
     partial_blocks: bool,
     max_messages: Option<usize>,
+    client_metadata: BTreeMap<String, String>,
 }
 
 impl TychoStreamBuilder {
@@ -102,6 +103,7 @@ impl TychoStreamBuilder {
             compression: true,
             partial_blocks: false,
             max_messages: None,
+            client_metadata: BTreeMap::new(),
         }
     }
 
@@ -189,6 +191,23 @@ impl TychoStreamBuilder {
         self
     }
 
+    /// Sets the client metadata sent to the server in the `X-Tycho-Client-Metadata` header.
+    ///
+    /// The map is opaque to tycho-client; consumers supply their own keys. Replaces any
+    /// previously set metadata. An empty map sends no header. Invalid keys/values are rejected
+    /// at `build()` time.
+    pub fn client_metadata(mut self, metadata: BTreeMap<String, String>) -> Self {
+        self.client_metadata = metadata;
+        self
+    }
+
+    /// Adds a single client-metadata entry, keeping any previously set entries.
+    pub fn client_metadata_entry(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.client_metadata
+            .insert(key.into(), value.into());
+        self
+    }
+
     /// Disables TLS/SSL for the connection, using `http` and `ws` protocols.
     pub fn no_tls(mut self, no_tls: bool) -> Self {
         self.no_tls = no_tls;
@@ -256,6 +275,10 @@ impl TychoStreamBuilder {
             ));
         }
 
+        // Serialize client metadata once, before any network I/O, so invalid input fails fast.
+        let metadata_header = crate::client_metadata::serialize_client_metadata(&self.client_metadata)
+            .map_err(|e| StreamError::SetUpError(format!("Invalid client metadata: {e}")))?;
+
         // Attempt to read the authentication key from the environment variable if not provided
         let auth_key = self
             .auth_key
@@ -286,12 +309,14 @@ impl TychoStreamBuilder {
                 config.cooldown,
             ),
         }
-        .map_err(|e| StreamError::SetUpError(e.to_string()))?;
+        .map_err(|e| StreamError::SetUpError(e.to_string()))?
+        .with_client_metadata_header(metadata_header.clone());
         let rpc_client = HttpRPCClient::new(
             &tycho_rpc_url,
             HttpRPCClientOptions::new()
                 .with_auth_key(auth_key)
-                .with_compression(self.compression),
+                .with_compression(self.compression)
+                .with_client_metadata_header(metadata_header),
         )
         .map_err(|e| StreamError::SetUpError(e.to_string()))?;
         let ws_jh = ws_client
@@ -520,6 +545,34 @@ mod tests {
             .build()
             .await;
         assert!(receiver.is_err(), "Client should fail to build when no exchanges are registered.");
+    }
+
+    #[test]
+    fn test_client_metadata_entry_accumulates() {
+        let builder = TychoStreamBuilder::new("localhost:4242", Chain::Ethereum)
+            .client_metadata_entry("fynd_version", "0.57.0")
+            .client_metadata_entry("preset", "best");
+        assert_eq!(
+            builder
+                .client_metadata
+                .get("fynd_version")
+                .map(String::as_str),
+            Some("0.57.0")
+        );
+        assert_eq!(builder.client_metadata.get("preset").map(String::as_str), Some("best"));
+    }
+
+    #[tokio::test]
+    async fn test_build_fails_fast_on_invalid_metadata() {
+        let build = TychoStreamBuilder::new("localhost:4242", Chain::Ethereum)
+            .exchange("uniswap_v2", ComponentFilter::with_tvl_range(100.0, 100.0))
+            .client_metadata_entry("bad key", "v")
+            .build();
+        // Serialization happens before any network I/O, so an invalid entry must fail fast.
+        let res = tokio::time::timeout(Duration::from_secs(2), build)
+            .await
+            .expect("build should fail fast without network I/O");
+        assert!(matches!(res, Err(StreamError::SetUpError(_))));
     }
 
     #[ignore = "require tycho gateway"]
