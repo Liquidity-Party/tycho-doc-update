@@ -1,6 +1,6 @@
 //! This module contains Tycho Websocket implementation
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -10,7 +10,7 @@ use actix::{
 };
 use actix_web::{web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
-use metrics::{counter, gauge};
+use metrics::{counter, gauge, Label};
 use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_common::{
     dto::{BlockAggregatedChanges, Command, Response, WebSocketMessage},
@@ -18,7 +18,7 @@ use tycho_common::{
 };
 use uuid::Uuid;
 
-use crate::extractor::runner::MessageSender;
+use crate::{extractor::runner::MessageSender, services::client_metadata};
 
 /// How often heartbeat pings are sent
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
@@ -63,6 +63,8 @@ pub struct WsActor {
     compression_enabled: HashMap<Uuid, bool>,
     user_identity: Option<String>,
     client_version: String,
+    /// Allowlisted client metadata projected onto connection metrics.
+    client_metadata: BTreeMap<String, String>,
 }
 
 impl WsActor {
@@ -70,6 +72,7 @@ impl WsActor {
         app_state: web::Data<WsData>,
         user_identity: Option<String>,
         client_version: String,
+        client_metadata: BTreeMap<String, String>,
     ) -> Self {
         Self {
             id: Uuid::new_v4(),
@@ -79,7 +82,25 @@ impl WsActor {
             compression_enabled: HashMap::new(),
             user_identity,
             client_version,
+            client_metadata,
         }
+    }
+
+    /// Labels for the `websocket_connections_active` gauge: the existing identity/version labels
+    /// plus the allowlisted client metadata.
+    fn connection_labels(&self) -> Vec<Label> {
+        let mut labels = vec![
+            Label::new(
+                "user_identity",
+                self.user_identity
+                    .as_deref()
+                    .unwrap_or("unknown")
+                    .to_owned(),
+            ),
+            Label::new("client_version", self.client_version.clone()),
+        ];
+        labels.extend(client_metadata::metric_labels(&self.client_metadata));
+        labels
     }
 
     /// Entry point for the WS connection
@@ -105,7 +126,14 @@ impl WsActor {
             .unwrap_or("unknown")
             .to_string();
 
-        let ws_actor = WsActor::new(data, user_identity, client_version);
+        let client_metadata = client_metadata::parse_client_metadata(
+            req.headers()
+                .get(client_metadata::CLIENT_METADATA_HEADER)
+                .and_then(|value| value.to_str().ok())
+                .unwrap_or(""),
+        );
+
+        let ws_actor = WsActor::new(data, user_identity, client_version, client_metadata);
 
         ws::start(ws_actor, &req, stream)
     }
@@ -376,12 +404,7 @@ impl Actor for WsActor {
     fn started(&mut self, ctx: &mut Self::Context) {
         info!("Websocket connection established");
 
-        gauge!(
-            "websocket_connections_active",
-            "user_identity" => self.user_identity.as_deref().unwrap_or("unknown").to_owned(),
-            "client_version" => self.client_version.clone(),
-        )
-        .increment(1);
+        gauge!("websocket_connections_active", self.connection_labels()).increment(1);
 
         // Start the heartbeat
         self.heartbeat(ctx);
@@ -391,12 +414,7 @@ impl Actor for WsActor {
     fn stopped(&mut self, ctx: &mut Self::Context) {
         info!("Websocket connection closed");
 
-        gauge!(
-            "websocket_connections_active",
-            "user_identity" => self.user_identity.as_deref().unwrap_or("unknown").to_owned(),
-            "client_version" => self.client_version.clone(),
-        )
-        .decrement(1);
+        gauge!("websocket_connections_active", self.connection_labels()).decrement(1);
 
         // Close all remaining subscriptions
         let user_identity = self
