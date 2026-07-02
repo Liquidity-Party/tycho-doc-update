@@ -67,8 +67,9 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for CurveState {
 
         let pool_alloy = AlloyAddress::from_slice(pool_address.as_ref());
         // Ensure the pool's actual MATH() contract is loaded — the indexed math address can be
-        // stale, which otherwise breaks TwoCrypto NG-vs-Stable detection.
-        vm::load_math_contract(&engine, &pool_alloy).await;
+        // stale, which otherwise breaks TwoCrypto NG-vs-Stable detection. Fail decoding if a pool
+        // that exposes MATH() cannot load it, rather than build a pool with unresolved math.
+        vm::load_math_contract(&engine, &pool_alloy).await?;
 
         let resolved = variant::resolve_variant(
             &value.component.static_attributes,

@@ -384,22 +384,32 @@ where
 
 /// Ensure the code of the pool's actual `MATH()` contract is loaded into the engine.
 ///
-/// Best-effort: TwoCrypto-NG pools delegate math to a `MATH()` contract, but the substreams may
-/// index a stale/hardcoded math address (a different version than the pool actually uses), so the
-/// real one read from `MATH()` is loaded here by fetching its code via RPC. No-op for pools without
-/// `MATH()` or when the code cannot be fetched.
+/// TwoCrypto-NG pools delegate math to a `MATH()` contract, and the substreams may index a
+/// stale/hardcoded math address (a different version than the pool actually uses), so the real one
+/// read from `MATH()` is loaded here by fetching its code via RPC. A no-op for pools without a
+/// `MATH()` getter. Returns an error when a pool exposes `MATH()` but its code cannot be fetched or
+/// loaded — the caller must fail decoding rather than build a pool with unresolved math.
 pub async fn load_math_contract<D: EngineDatabaseInterface + Clone + Debug>(
     engine: &SimulationEngine<D>,
     pool: &AlloyAddress,
-) where
+) -> Result<(), SimulationError>
+where
     <D as DatabaseRef>::Error: Debug,
     <D as EngineDatabaseInterface>::Error: Debug,
 {
     let Some(math) = read_math_address(engine, pool) else {
-        return;
+        return Ok(());
     };
-    if let Ok(code) = get_code_for_contract(&math.to_string(), None).await {
-        let _ = engine.state.init_account(
+    let code = get_code_for_contract(&math.to_string(), None)
+        .await
+        .map_err(|e| {
+            SimulationError::RecoverableError(format!(
+                "curve: failed to fetch MATH() code for {math}: {e}"
+            ))
+        })?;
+    engine
+        .state
+        .init_account(
             math,
             AccountInfo {
                 balance: U256::ZERO,
@@ -409,8 +419,11 @@ pub async fn load_math_contract<D: EngineDatabaseInterface + Clone + Debug>(
             },
             None,
             false,
-        );
-    }
+        )
+        .map_err(|e| {
+            SimulationError::FatalError(format!("curve: failed to load MATH() code for {math}: {e:?}"))
+        })?;
+    Ok(())
 }
 
 /// Read the `version()` string from a contract (e.g. a TwoCrypto MATH implementation), if present.
