@@ -202,7 +202,11 @@ impl TychoStreamBuilder {
     }
 
     /// Adds a single client-metadata entry, keeping any previously set entries.
-    pub fn client_metadata_entry(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+    pub fn client_metadata_entry(
+        mut self,
+        key: impl Into<String>,
+        value: impl Into<String>,
+    ) -> Self {
         self.client_metadata
             .insert(key.into(), value.into());
         self
@@ -276,8 +280,9 @@ impl TychoStreamBuilder {
         }
 
         // Serialize client metadata once, before any network I/O, so invalid input fails fast.
-        let metadata_header = crate::client_metadata::serialize_client_metadata(&self.client_metadata)
-            .map_err(|e| StreamError::SetUpError(format!("Invalid client metadata: {e}")))?;
+        let metadata_header =
+            crate::client_metadata::serialize_client_metadata(&self.client_metadata)
+                .map_err(|e| StreamError::SetUpError(format!("Invalid client metadata: {e}")))?;
 
         // Attempt to read the authentication key from the environment variable if not provided
         let auth_key = self
@@ -559,7 +564,13 @@ mod tests {
                 .map(String::as_str),
             Some("0.57.0")
         );
-        assert_eq!(builder.client_metadata.get("preset").map(String::as_str), Some("best"));
+        assert_eq!(
+            builder
+                .client_metadata
+                .get("preset")
+                .map(String::as_str),
+            Some("best")
+        );
     }
 
     #[tokio::test]

@@ -1303,7 +1303,10 @@ impl HttpRPCClient {
 
         // Add generic client metadata if one is given. Pre-validated by the serializer, but mirror
         // the auth pattern so any residual formatting error surfaces as a FormatRequest error.
-        if let Some(metadata) = options.client_metadata_header.as_deref() {
+        if let Some(metadata) = options
+            .client_metadata_header
+            .as_deref()
+        {
             let value = header::HeaderValue::from_str(metadata).map_err(|e| {
                 RPCError::FormatRequest(format!("Invalid client metadata format: {e}"))
             })?;

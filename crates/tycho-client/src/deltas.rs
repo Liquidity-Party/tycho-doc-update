@@ -1266,6 +1266,8 @@ mod tests {
 
     /// Starts a minimal WS server that captures the handshake request headers, connects a client
     /// with the given metadata, and returns the headers the server saw.
+    // The callback's Result type is dictated by tungstenite's Callback trait.
+    #[allow(clippy::result_large_err)]
     async fn capture_handshake_headers(
         client_metadata: Option<String>,
     ) -> tungstenite::http::HeaderMap {
@@ -1282,13 +1284,11 @@ mod tests {
 
         let server = tokio::spawn(async move {
             let (stream, _) = listener.accept().await.unwrap();
-            let callback = move |req: &SrvRequest, resp: SrvResponse| -> Result<
-                SrvResponse,
-                ErrorResponse,
-            > {
-                let _ = tx.send(req.headers().clone());
-                Ok(resp)
-            };
+            let callback =
+                move |req: &SrvRequest, resp: SrvResponse| -> Result<SrvResponse, ErrorResponse> {
+                    let _ = tx.send(req.headers().clone());
+                    Ok(resp)
+                };
             let _ws = tokio_tungstenite::accept_hdr_async(stream, callback)
                 .await
                 .unwrap();
