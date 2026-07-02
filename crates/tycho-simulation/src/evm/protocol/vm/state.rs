@@ -1586,4 +1586,163 @@ mod tests {
 
         assert!(deserialized.is_err());
     }
+
+    /// A live snapshot's block number/timestamp take precedence over the static block overrides,
+    /// field by field, while an absent or empty snapshot leaves them untouched.
+    #[tokio::test]
+    async fn test_block_env_prefers_live_overrides() {
+        let mut pool_state = setup_pool_state().await;
+        pool_state.block_overrides =
+            Some(BlockEnvOverrides { number: Some(100), timestamp: Some(1_000) });
+
+        // No live snapshot: the statically configured overrides are used unchanged.
+        assert_eq!(
+            pool_state.block_env(None),
+            Some(BlockEnvOverrides { number: Some(100), timestamp: Some(1_000) })
+        );
+
+        // A live snapshot with neither field set does not touch the static overrides.
+        let empty = OverrideSnapshot::default();
+        assert_eq!(
+            pool_state.block_env(Some(&empty)),
+            Some(BlockEnvOverrides { number: Some(100), timestamp: Some(1_000) })
+        );
+
+        // Present live fields win; unset live fields keep the static value.
+        let live = OverrideSnapshot {
+            block_number: Some(200),
+            block_timestamp: None,
+            ..Default::default()
+        };
+        assert_eq!(
+            pool_state.block_env(Some(&live)),
+            Some(BlockEnvOverrides { number: Some(200), timestamp: Some(1_000) })
+        );
+
+        // With no static overrides, the live block environment stands on its own.
+        pool_state.block_overrides = None;
+        let live = OverrideSnapshot {
+            block_number: Some(300),
+            block_timestamp: Some(3_000),
+            ..Default::default()
+        };
+        assert_eq!(
+            pool_state.block_env(Some(&live)),
+            Some(BlockEnvOverrides { number: Some(300), timestamp: Some(3_000) })
+        );
+    }
+
+    /// Live storage is merged into the computed overwrites: a fresh contract is added, a value on a
+    /// slot the baseline already sets is overridden (live wins on conflict), and empty live storage
+    /// is a no-op.
+    #[tokio::test]
+    async fn test_get_overwrites_applies_live_storage() {
+        let pool_state = setup_pool_state().await;
+        let tokens = vec![dai_addr(), bal_addr()];
+        let max = *MAX_BALANCE / U256::from(100);
+
+        let baseline = pool_state
+            .get_overwrites(tokens.clone(), max, None)
+            .unwrap();
+
+        // An empty live snapshot leaves the overwrites unchanged.
+        let empty = OverrideSnapshot::default();
+        assert_eq!(
+            pool_state
+                .get_overwrites(tokens.clone(), max, Some(&empty))
+                .unwrap(),
+            baseline
+        );
+
+        // Pick an address/slot the baseline already sets, so we can assert live wins the conflict.
+        let (conflict_addr, conflict_slot, baseline_val) = {
+            let (addr, slots) = baseline
+                .iter()
+                .next()
+                .expect("baseline has overwrites");
+            let (slot, val) = slots
+                .iter()
+                .next()
+                .expect("address has slots");
+            (*addr, *slot, *val)
+        };
+        let sentinel = baseline_val + U256::from(1);
+        let fresh = Address::from([0xAB; 20]);
+        assert!(
+            !baseline.contains_key(&fresh),
+            "fresh address must originate from the live snapshot"
+        );
+
+        let live = OverrideSnapshot {
+            storage: std::sync::Arc::new(HashMap::from([
+                (fresh, HashMap::from([(U256::from(7), U256::from(123))])),
+                (conflict_addr, HashMap::from([(conflict_slot, sentinel)])),
+            ])),
+            ..Default::default()
+        };
+        let with_live = pool_state
+            .get_overwrites(tokens, max, Some(&live))
+            .unwrap();
+
+        assert_eq!(
+            with_live
+                .get(&fresh)
+                .and_then(|slots| slots.get(&U256::from(7))),
+            Some(&U256::from(123)),
+            "live storage for a fresh contract must be merged in"
+        );
+        assert_eq!(
+            with_live
+                .get(&conflict_addr)
+                .and_then(|slots| slots.get(&conflict_slot)),
+            Some(&sentinel),
+            "live override must win on slot conflict"
+        );
+    }
+
+    /// `get_live_snapshot` returns the attached snapshot only while it is fresh: an expired one is
+    /// dropped (so the pool reverts to indexed state), and no channel means no snapshot. Expiry is
+    /// pinned to the extremes (`1` = long past, `u64::MAX` = effectively never) so the assertions
+    /// are independent of the wall clock.
+    #[tokio::test]
+    async fn test_get_live_snapshot_drops_expired() {
+        let mut pool_state = setup_pool_state().await;
+
+        // No channel attached: nothing to read.
+        assert!(pool_state.get_live_snapshot().is_none());
+
+        // A snapshot without an expiry never goes stale.
+        let never =
+            OverrideSnapshot { block_number: Some(1), expires_at: None, ..Default::default() };
+        let (_never_tx, never_rx) = watch::channel(never);
+        pool_state.set_live_overrides(never_rx);
+        assert_eq!(
+            pool_state
+                .get_live_snapshot()
+                .and_then(|snapshot| snapshot.block_number),
+            Some(1)
+        );
+
+        // A snapshot whose expiry is far in the future is returned.
+        let fresh = OverrideSnapshot {
+            block_number: Some(42),
+            expires_at: Some(u64::MAX),
+            ..Default::default()
+        };
+        let (_fresh_tx, fresh_rx) = watch::channel(fresh);
+        pool_state.set_live_overrides(fresh_rx);
+        assert_eq!(
+            pool_state
+                .get_live_snapshot()
+                .and_then(|snapshot| snapshot.block_number),
+            Some(42)
+        );
+
+        // A snapshot whose expiry is in the past is dropped.
+        let expired =
+            OverrideSnapshot { block_number: Some(42), expires_at: Some(1), ..Default::default() };
+        let (_expired_tx, expired_rx) = watch::channel(expired);
+        pool_state.set_live_overrides(expired_rx);
+        assert!(pool_state.get_live_snapshot().is_none());
+    }
 }
