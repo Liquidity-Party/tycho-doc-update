@@ -102,7 +102,7 @@
 //! }
 //! ```
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     sync::Arc,
     time,
 };
@@ -457,6 +457,33 @@ impl ProtocolStreamBuilder {
     /// Sets the API key for authenticating with the Tycho server.
     pub fn auth_key(mut self, auth_key: Option<String>) -> Self {
         self.stream_builder = self.stream_builder.auth_key(auth_key);
+        self
+    }
+
+    /// Sets the client metadata forwarded to the server in the `X-Tycho-Client-Metadata` header.
+    ///
+    /// See [`TychoStreamBuilder::client_metadata`]. Values are self-reported and may surface in the
+    /// server's metrics and logs — do not include secrets or personally identifiable information.
+    pub fn client_metadata(mut self, metadata: BTreeMap<String, String>) -> Self {
+        self.stream_builder = self
+            .stream_builder
+            .client_metadata(metadata);
+        self
+    }
+
+    /// Adds a single client-metadata entry, keeping any previously set entries.
+    ///
+    /// See [`TychoStreamBuilder::client_metadata_entry`]. Values are self-reported and may surface
+    /// in the server's metrics and logs — do not include secrets or personally identifiable
+    /// information.
+    pub fn client_metadata_entry(
+        mut self,
+        key: impl Into<String>,
+        value: impl Into<String>,
+    ) -> Self {
+        self.stream_builder = self
+            .stream_builder
+            .client_metadata_entry(key, value);
         self
     }
 
