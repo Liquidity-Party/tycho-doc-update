@@ -1,3 +1,11 @@
+## [0.322.0](https://github.com/propeller-heads/tycho/compare/0.321.0...0.322.0) (2026-07-02)
+
+
+### Features
+
+* Add LunarBase to Maximodel ([9ae5a0a](https://github.com/propeller-heads/tycho/commit/9ae5a0a1566171565e9d4942e8ad926d793cca25))
+* Add LunarBase to Maximodel ([#1124](https://github.com/propeller-heads/tycho/issues/1124)) ([084e515](https://github.com/propeller-heads/tycho/commit/084e515ae9dd038c2f8cf0824d0286bd615e2ccd))
+
 ## [0.321.0](https://github.com/propeller-heads/tycho/compare/0.320.4...0.321.0) (2026-07-02)
 
 
