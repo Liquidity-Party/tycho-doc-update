@@ -35,6 +35,12 @@ const CRYPTOSWAP_GAS: u64 = 350_000;
 /// `tokens` and `decimals` are ordered to match the pool's coin indices, so a token address maps
 /// directly to a `curve_math` coin index. State (`pool`) is rebuilt from the VM on every
 /// `delta_transition`.
+///
+/// Multi-hop limitation: the state returned by [`ProtocolSim::get_amount_out`] updates coin
+/// balances only, holding `D` and `price_scale` fixed. This is exact for StableSwap (which
+/// recomputes `D` from balances on every quote), but a route that re-quotes the *same* CryptoSwap
+/// pool sees an approximation on the second hop, because CryptoSwap caches `D` and would update it
+/// (via `tweak_price`) after an on-chain exchange.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CurveState {
     /// Pool contract address (the Tycho component id).
