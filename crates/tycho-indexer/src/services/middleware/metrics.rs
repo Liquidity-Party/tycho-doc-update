@@ -238,7 +238,10 @@ mod tests {
         let request = test::TestRequest::get()
             .uri("/v1/health")
             .insert_header(("user-identity", "alice"))
-            .insert_header(("x-tycho-client-metadata", "fynd_version=1.2.3; preset=fast; secret=xyz"))
+            .insert_header((
+                "x-tycho-client-metadata",
+                "fynd_version=1.2.3; preset=fast; secret=xyz",
+            ))
             .to_request();
         let response = test::call_service(&app, request).await;
         assert_eq!(response.status(), StatusCode::OK);
