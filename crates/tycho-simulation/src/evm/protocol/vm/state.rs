@@ -39,15 +39,6 @@ use crate::evm::{
     simulation::BlockEnvOverrides,
 };
 
-/// Current unix time in seconds, or `0` if the system clock is before the epoch. Used to test live
-/// override snapshots against their expiry.
-fn unix_now_secs() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|elapsed| elapsed.as_secs())
-        .unwrap_or(0)
-}
-
 #[derive(Clone)]
 pub struct EVMPoolState<D: EngineDatabaseInterface + Clone + Debug>
 where
@@ -187,7 +178,11 @@ where
             .live_overrides
             .as_ref()
             .map(|receiver| receiver.borrow().clone())?;
-        if snapshot.is_expired(unix_now_secs()) {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_secs())
+            .unwrap_or(0);
+        if snapshot.is_expired(now) {
             return None;
         }
         Some(snapshot)
