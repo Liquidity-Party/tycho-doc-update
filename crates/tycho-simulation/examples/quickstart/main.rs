@@ -47,8 +47,8 @@ use tycho_simulation::{
             aerodrome_slipstreams::state::AerodromeSlipstreamsState,
             curve::CurveState,
             ekubo::state::EkuboState,
-            ekubo_v3::{self, state::EkuboV3State},
-            filters::{balancer_v2_pool_filter, curve_filter},
+            ekubo_v3::state::EkuboV3State,
+            filters::{balancer_v2_pool_filter, curve_filter, ekubo_v3_extension_filter},
             pancakeswap_v2::state::PancakeswapV2State,
             uniswap_v2::state::UniswapV2State,
             uniswap_v3::state::UniswapV3State,
@@ -206,7 +206,11 @@ async fn main() {
                 // .exchange::<UniswapV4State>("uniswap_v4_hooks", tvl_filter.clone(),
                 // Some(uniswap_v4_angstrom_hook_pool_filter))
                 .exchange::<EkuboState>("ekubo_v2", tvl_filter.clone(), None)
-                .exchange::<EkuboV3State>("ekubo_v3", tvl_filter.clone(), Some(ekubo_v3::filter_fn))
+                .exchange::<EkuboV3State>(
+                    "ekubo_v3",
+                    tvl_filter.clone(),
+                    Some(ekubo_v3_extension_filter),
+                )
                 .exchange::<CurveState>("vm:curve", tvl_filter.clone(), Some(curve_filter))
                 .exchange::<EVMPoolState<PreCachedDB>>("vm:maverick_v2", tvl_filter.clone(), None)
         }
