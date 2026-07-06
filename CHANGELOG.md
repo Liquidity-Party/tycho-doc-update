@@ -1,3 +1,22 @@
+## [0.324.0](https://github.com/propeller-heads/tycho/compare/0.323.0...0.324.0) (2026-07-06)
+
+
+### Features
+
+* add hybrid Curve implementation (vm:curve) ([db91793](https://github.com/propeller-heads/tycho/commit/db91793daa6d8f2f76ed75e99391e889605d530c))
+* **curve:** warn when vm:curve uses the deprecated VM adapter ([4cd64c6](https://github.com/propeller-heads/tycho/commit/4cd64c6f3220bdb587915bfe47fa768195094821))
+* exclude rate-bearing and rebasing curve pools from vm:curve ([bd21ab3](https://github.com/propeller-heads/tycho/commit/bd21ab3b4c1c2ef9b49c6b4edd619a6657b377e2))
+* hybrid Curve implementation (vm:curve) with vendored MIT math ([#1126](https://github.com/propeller-heads/tycho/issues/1126)) ([3ad633c](https://github.com/propeller-heads/tycho/commit/3ad633cbed5b97e0c61ed0a25d54ead845997f9a))
+* re-derive post-MIT Curve math features from Curve Vyper (clean-room) ([1bbcb36](https://github.com/propeller-heads/tycho/commit/1bbcb36732983b4730c298bfe236e65964de4aa6))
+* vendor MIT curve-math/curve-adapter as inline modules ([c190602](https://github.com/propeller-heads/tycho/commit/c1906027896f4041f61f117058edf97d15659d1b))
+
+
+### Bug Fixes
+
+* **curve:** fail decoding when a pool's MATH() code cannot load ([6412467](https://github.com/propeller-heads/tycho/commit/6412467f0dbf23c109dfd51cc1391bc11e067701))
+* **curve:** resolve TwoCrypto NG-vs-Stable on the probe fallback path ([3bb05c5](https://github.com/propeller-heads/tycho/commit/3bb05c50a51ded33510f76f04c5ea0b82c60cd25))
+* **curve:** return an error from get_limits when the solver fails ([6e280b1](https://github.com/propeller-heads/tycho/commit/6e280b1b882d1a37b23c554b3e56c805402086ec))
+
 ## [0.323.0](https://github.com/propeller-heads/tycho/compare/0.322.0...0.323.0) (2026-07-03)
 
 
