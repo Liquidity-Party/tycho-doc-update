@@ -60,7 +60,7 @@ use tokio::{
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use tracing::{info, warn};
 
-use super::{OverrideSnapshot, StateOverrideProvider};
+use super::{FailurePolicy, OverrideSnapshot, StateOverrideProvider};
 
 /// Storage overrides keyed by contract address, then by storage slot.
 type VenueOverrides = HashMap<Address, HashMap<U256, U256>>;
@@ -449,6 +449,12 @@ impl TitanProvider {
             block_timestamp,
             storage: Arc::new(storage),
             expires_at,
+            // Titan snapshots target the pending block and a pair is only quotable under them
+            // once its oracle lane is re-stamped for that block — briefly false for every pair
+            // at block transitions, and for longer stretches for pairs the maker is not actively
+            // quoting. The indexed state remains simulatable throughout, so pools should fall
+            // back to it instead of surfacing the transient revert.
+            failure_policy: FailurePolicy::FallbackToIndexedState,
         }))
     }
 
@@ -615,6 +621,8 @@ mod tests {
         assert_eq!(snapshot.block_timestamp, Some(1778253911));
         // 1778253913749564761 ns -> 1778253913 s, plus the 12s quote TTL.
         assert_eq!(snapshot.expires_at, Some(1778253913 + TITAN_QUOTE_TTL_SECS));
+        // Titan overrides are only intermittently applicable, so pools must fall back.
+        assert_eq!(snapshot.failure_policy, FailurePolicy::FallbackToIndexedState);
 
         let account = "0x1038c87766e36d1925889e6f26d10e0012d50fed"
             .parse::<Address>()
