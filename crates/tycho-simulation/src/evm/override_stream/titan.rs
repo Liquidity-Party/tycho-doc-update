@@ -40,8 +40,10 @@
 //!   registry's `MAX_UPDATE_AGE`/`MAX_UPDATE_LEAD_TIME` are both zero, so on-chain writes require
 //!   `updateTimestamp == block.timestamp` — which is why Titan stamps lanes with the pending
 //!   block's timestamp and why simulations must run under that timestamp.
-//! - bopAMM (Bebop) does not use the registry: its frames override the venue's own storage with the
-//!   maker's signed quote, so no lane timestamps appear there.
+//! - Venue keys are unstable: makers stream under several alias addresses (oracle and router keys
+//!   carry identical payloads) and deployments change every few weeks. Each protocol therefore
+//!   subscribes to all of its known aliases, and an empty snapshot channel is the first sign that
+//!   every alias left the stream (`scripts/titan-venue-census.py` shows the live venue set).
 //!
 //! All Titan-specific knowledge (venue addresses, timestamp resolution, endpoint URL) lives only
 //! in this module; the rest of the override machinery is protocol-agnostic.
@@ -111,15 +113,17 @@ const KIPSELI_PROTOCOL_SYSTEM: &str = "vm:kipseli";
 /// bopAMM protocol system identifier as indexed by Tycho.
 const BOPAMM_PROTOCOL_SYSTEM: &str = "vm:bopamm";
 
-/// FermiSwap pAMM venue address on Titan's quote stream.
-const FERMISWAP_VENUE: &str = "0xb1076fe3ab5e28005c7c323bac5ac06a680d452e";
-/// Kipseli pAMM venue address on Titan's quote stream.
-const KIPSELI_VENUE: &str = "0x5cdbe59400cc2efdcc2b54acca4a99fe00dd588c";
-/// bopAMM (Bebop) pAMM venue address on Titan's quote stream. Unlike the registry-backed venues,
-/// its frames override the venue's own storage with the maker's signed quote. Supersedes
-/// `0x160141a205f5ddcf096ba3f48b7ed21eb52c62ea`, which stopped trading on 2026-05-21 and no longer
-/// appears on the stream.
-const BOPAMM_VENUE: &str = "0x28d9ccedf1b7ac9b3f090f4f0292837de87c1d39";
+/// FermiSwap venue aliases on Titan's quote stream: the FermiSwap oracle and the FermiSwapper
+/// router. Both keys carry the same registry diffs; either serves the protocol.
+const FERMISWAP_VENUES: &[&str] =
+    &["0xb1076fe3ab5e28005c7c323bac5ac06a680d452e", "0x5979458912f80b96d30d4220af8e2e4925a33320"];
+/// Kipseli venue aliases on Titan's quote stream: the Kipseli oracle and the KipseliPropAMMWrapper
+/// router, both carrying the same registry diffs.
+const KIPSELI_VENUES: &[&str] =
+    &["0x5cdbe59400cc2efdcc2b54acca4a99fe00dd588c", "0x71e790dd841c8a9061487cb3e78c288e75ce0b3d"];
+/// bopAMM (Bebop) venue on Titan's quote stream: a self-storage pAMM whose frames write the
+/// maker's signed quote into the venue's own storage.
+const BOPAMM_VENUES: &[&str] = &["0x160141a205f5ddcf096ba3f48b7ed21eb52c62ea"];
 
 /// Longest gap between Titan messages tolerated before the socket is treated as dead and
 /// re-established. Titan pushes several updates per second, so a multi-second silence means a
@@ -215,13 +219,13 @@ impl TitanProvider {
         let mut receivers = HashMap::new();
         let mut senders = Vec::new();
         for &protocol in protocols {
-            let Some(venue) = Self::venue_for_protocol(protocol) else {
+            let Some(venues) = Self::venues_for_protocol(protocol) else {
                 warn!("Unknown protocol: {protocol}");
                 continue;
             };
             let (tx, rx) = watch::channel(OverrideSnapshot::default());
             receivers.insert(protocol.to_string(), rx);
-            senders.push((venue, tx));
+            senders.push((venues, tx));
         }
         tokio::spawn(Self::run(url, senders));
         Self { receivers }
@@ -230,12 +234,13 @@ impl TitanProvider {
     /// Maintains the Titan WebSocket connection for the lifetime of the process.
     ///
     /// Connects, reads messages, and publishes each parsed [`OverrideSnapshot`] on the matching
-    /// venue channel. Any disconnect, read error, server-side close, or idle timeout drops back to
-    /// the reconnect loop, which retries forever with capped exponential backoff. The backoff is
-    /// reset only after a message is actually received, so a socket that connects and immediately
-    /// drops still backs off instead of busy-looping. This task never returns and never panics:
-    /// every failure mode is logged and retried.
-    async fn run(url: String, senders: Vec<(Address, watch::Sender<OverrideSnapshot>)>) {
+    /// protocol channel (a frame keyed by any of the protocol's venue aliases publishes). Any
+    /// disconnect, read error, server-side close, or idle timeout drops back to the reconnect
+    /// loop, which retries forever with capped exponential backoff. The backoff is reset only
+    /// after a message is actually received, so a socket that connects and immediately drops
+    /// still backs off instead of busy-looping. This task never returns and never panics: every
+    /// failure mode is logged and retried.
+    async fn run(url: String, senders: Vec<(Vec<Address>, watch::Sender<OverrideSnapshot>)>) {
         let mut attempt: u32 = 0;
         loop {
             // Every receiver (the provider handle plus all pool clones) has been dropped, so
@@ -282,21 +287,21 @@ impl TitanProvider {
                                 attempt = 0;
                                 match serde_json::from_str::<TitanMessage>(text.as_str()) {
                                     Ok(message) => {
-                                        for (venue, sender) in &senders {
-                                            match Self::extract_venue(&message, venue) {
+                                        for (venues, sender) in &senders {
+                                            match Self::extract_any_venue(&message, venues) {
                                                 // A send error means every receiver has been
                                                 // dropped; the check after this loop stops the
                                                 // task, so ignoring it here is safe.
                                                 Ok(Some(snapshot)) => {
                                                     let _ = sender.send(snapshot);
                                                 }
-                                                // Venue not present in this frame — nothing to do.
+                                                // No alias present in this frame — nothing to do.
                                                 Ok(None) => {}
                                                 // Malformed payload for this venue: keep the
                                                 // connection and last good snapshot, but surface
                                                 // it.
                                                 Err(e) => {
-                                                    warn!(%venue, error = %e, "Failed to extract Titan venue snapshot");
+                                                    warn!(?venues, error = %e, "Failed to extract Titan venue snapshot");
                                                 }
                                             }
                                         }
@@ -359,17 +364,42 @@ impl TitanProvider {
         }
     }
 
-    /// Maps a known pAMM `protocol_system` to its Titan venue address, or `None` if unknown.
+    /// Maps a known pAMM `protocol_system` to its Titan venue aliases, or `None` if unknown.
     ///
-    /// Titan/Fermi specifics (the venue address mapping) live only here.
-    fn venue_for_protocol(protocol_system: &str) -> Option<Address> {
+    /// Every alias of a protocol streams the same maker feed (e.g. its oracle and router
+    /// addresses); subscribing to all of them keeps the protocol served when one key disappears
+    /// from the stream, which venue deployments have been observed doing within hours.
+    /// Titan/venue specifics (the address mapping) live only here.
+    fn venues_for_protocol(protocol_system: &str) -> Option<Vec<Address>> {
         let raw = match protocol_system {
-            FERMISWAP_PROTOCOL_SYSTEM => FERMISWAP_VENUE,
-            KIPSELI_PROTOCOL_SYSTEM => KIPSELI_VENUE,
-            BOPAMM_PROTOCOL_SYSTEM => BOPAMM_VENUE,
+            FERMISWAP_PROTOCOL_SYSTEM => FERMISWAP_VENUES,
+            KIPSELI_PROTOCOL_SYSTEM => KIPSELI_VENUES,
+            BOPAMM_PROTOCOL_SYSTEM => BOPAMM_VENUES,
             _ => return None,
         };
-        raw.parse().ok()
+        let venues = raw
+            .iter()
+            .map(|venue| {
+                venue
+                    .parse()
+                    .unwrap_or_else(|e| panic!("hardcoded venue address {venue} must parse: {e}"))
+            })
+            .collect();
+        Some(venues)
+    }
+
+    /// Extracts the snapshot of the first alias in `venues` present in the frame, or `Ok(None)`
+    /// if none is. A frame carries a single top-level venue key, so at most one alias matches.
+    fn extract_any_venue(
+        message: &TitanMessage,
+        venues: &[Address],
+    ) -> Result<Option<OverrideSnapshot>, String> {
+        for venue in venues {
+            if let Some(snapshot) = Self::extract_venue(message, venue)? {
+                return Ok(Some(snapshot));
+            }
+        }
+        Ok(None)
     }
 
     /// Extracts a single venue's snapshot (`stateDiff` overrides + resolved block environment)
@@ -530,24 +560,26 @@ mod tests {
     }
 
     #[test]
-    fn venue_for_protocol_resolves_all_known_venues() {
+    fn venues_for_protocol_resolves_all_known_aliases() {
         let cases = [
-            (FERMISWAP_PROTOCOL_SYSTEM, FERMISWAP_VENUE),
-            (KIPSELI_PROTOCOL_SYSTEM, KIPSELI_VENUE),
-            (BOPAMM_PROTOCOL_SYSTEM, BOPAMM_VENUE),
+            (FERMISWAP_PROTOCOL_SYSTEM, FERMISWAP_VENUES),
+            (KIPSELI_PROTOCOL_SYSTEM, KIPSELI_VENUES),
+            (BOPAMM_PROTOCOL_SYSTEM, BOPAMM_VENUES),
         ];
         for (protocol, expected) in cases {
-            assert_eq!(
-                TitanProvider::venue_for_protocol(protocol).expect("venue must resolve"),
-                expected.parse::<Address>().unwrap(),
-                "venue mismatch for {protocol}",
-            );
+            let venues = TitanProvider::venues_for_protocol(protocol).expect("venues must resolve");
+            let expected: Vec<Address> = expected
+                .iter()
+                .map(|raw| raw.parse().unwrap())
+                .collect();
+            assert_eq!(venues, expected, "venue mismatch for {protocol}");
+            assert!(!venues.is_empty(), "every protocol needs at least one venue");
         }
     }
 
     #[test]
-    fn venue_for_protocol_returns_none_for_unknown() {
-        assert!(TitanProvider::venue_for_protocol("vm:unknown").is_none());
+    fn venues_for_protocol_returns_none_for_unknown() {
+        assert!(TitanProvider::venues_for_protocol("vm:unknown").is_none());
     }
 
     /// Sample message from the Titan docs (<https://docs.titanbuilder.xyz/propamms/takers>).
@@ -570,7 +602,7 @@ mod tests {
 
     #[test]
     fn extract_venue_reads_state_diff() {
-        let venue = FERMISWAP_VENUE
+        let venue = FERMISWAP_VENUES[0]
             .parse::<Address>()
             .unwrap();
         let message = serde_json::from_str::<TitanMessage>(SAMPLE_MESSAGE).expect("valid JSON");
@@ -604,11 +636,42 @@ mod tests {
 
     #[test]
     fn extract_venue_returns_none_for_absent_venue() {
-        let venue = KIPSELI_VENUE
+        let venue = KIPSELI_VENUES[0]
             .parse::<Address>()
             .unwrap();
         let message = serde_json::from_str::<TitanMessage>(SAMPLE_MESSAGE).expect("valid JSON");
         assert!(TitanProvider::extract_venue(&message, &venue)
+            .unwrap()
+            .is_none());
+    }
+
+    /// The sample message is keyed by the FermiSwap oracle (`FERMISWAP_VENUES[0]`), so listing the
+    /// router alias first must fall through to the oracle rather than give up.
+    #[test]
+    fn extract_any_venue_falls_back_to_a_later_alias() {
+        let message = serde_json::from_str::<TitanMessage>(SAMPLE_MESSAGE).expect("valid JSON");
+        let aliases = [
+            FERMISWAP_VENUES[1]
+                .parse::<Address>()
+                .unwrap(),
+            FERMISWAP_VENUES[0]
+                .parse::<Address>()
+                .unwrap(),
+        ];
+        let snapshot = TitanProvider::extract_any_venue(&message, &aliases)
+            .expect("extract must succeed")
+            .expect("oracle alias is present in the frame");
+        assert_eq!(snapshot.block_number, Some(25051224));
+    }
+
+    #[test]
+    fn extract_any_venue_returns_none_when_no_alias_matches() {
+        let message = serde_json::from_str::<TitanMessage>(SAMPLE_MESSAGE).expect("valid JSON");
+        let aliases: Vec<Address> = KIPSELI_VENUES
+            .iter()
+            .map(|raw| raw.parse().unwrap())
+            .collect();
+        assert!(TitanProvider::extract_any_venue(&message, &aliases)
             .unwrap()
             .is_none());
     }
