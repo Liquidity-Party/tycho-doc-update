@@ -1,3 +1,17 @@
+## [0.327.0](https://github.com/propeller-heads/tycho/compare/0.326.0...0.327.0) (2026-07-07)
+
+
+### Features
+
+* add bopamm to integration test ([f2f6fd5](https://github.com/propeller-heads/tycho/commit/f2f6fd5e7cb4de616edb8469dc1e606d4ef85ea7))
+* add bopamm to integration test ([#1165](https://github.com/propeller-heads/tycho/issues/1165)) ([cdd0381](https://github.com/propeller-heads/tycho/commit/cdd0381b6be304ca6eabc7e366dc25ba52bad515))
+
+
+### Bug Fixes
+
+* log instead of failing when Metric RFQ is unsupported on chain ([c21f0ee](https://github.com/propeller-heads/tycho/commit/c21f0ee366deaab320f8d8f5556b6366996d6342))
+* log instead of failing when Metric RFQ is unsupported on chain ([#1164](https://github.com/propeller-heads/tycho/issues/1164)) ([117d322](https://github.com/propeller-heads/tycho/commit/117d322a96062bfcd96dfcd533bb31199389e60f))
+
 ## [0.326.0](https://github.com/propeller-heads/tycho/compare/0.325.0...0.326.0) (2026-07-07)
 
 
