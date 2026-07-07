@@ -195,6 +195,7 @@ impl ProtocolStreamProcessor {
                 "rocketpool".to_string(),
                 "vm:liquidityparty".to_string(),
                 "vm:fermiswap".to_string(),
+                "vm:bopamm".to_string(),
             ],
             Chain::Base => vec![
                 "uniswap_v2".to_string(),
@@ -361,6 +362,13 @@ impl ProtocolStreamProcessor {
             "vm:fermiswap" => {
                 stream = stream.exchange::<EVMPoolState<PreCachedDB>>(
                     "vm:fermiswap",
+                    tvl_filter.clone(),
+                    None,
+                );
+            }
+            "vm:bopamm" => {
+                stream = stream.exchange::<EVMPoolState<PreCachedDB>>(
+                    "vm:bopamm",
                     tvl_filter.clone(),
                     None,
                 );
