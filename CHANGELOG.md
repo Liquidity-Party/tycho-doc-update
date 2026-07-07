@@ -1,3 +1,10 @@
+## [0.326.0](https://github.com/propeller-heads/tycho/compare/0.325.0...0.326.0) (2026-07-07)
+
+
+### Features
+
+* add missing metric addresses ([38d2925](https://github.com/propeller-heads/tycho/commit/38d2925dcef864234c2e9774e36780b10fa80f44))
+
 ## [0.325.0](https://github.com/propeller-heads/tycho/compare/0.324.0...0.325.0) (2026-07-07)
 
 
