@@ -1,3 +1,20 @@
+## [0.325.0](https://github.com/propeller-heads/tycho/compare/0.324.0...0.325.0) (2026-07-07)
+
+
+### Features
+
+* **simulation:** add titan_override_monitor example ([5163cc0](https://github.com/propeller-heads/tycho/commit/5163cc0cb09c113bfd0e8964ae2173ee54aa3e09))
+* **simulation:** fall back to indexed state on override failures ([76db5ce](https://github.com/propeller-heads/tycho/commit/76db5cec154e4b7d23f31ae320a1a250e822692b))
+
+
+### Bug Fixes
+
+* bump crossbeam dependencies ([9a53cf7](https://github.com/propeller-heads/tycho/commit/9a53cf719eb7980b97f5d7cb00d58c110f1f802a))
+* bump crossbeam dependencies ([#1162](https://github.com/propeller-heads/tycho/issues/1162)) ([272d545](https://github.com/propeller-heads/tycho/commit/272d5457a27b4d6b1e78a57c5cb3572b9af80137))
+* **simulation:** derive Titan block timestamp from the beacon slot ([0af3b51](https://github.com/propeller-heads/tycho/commit/0af3b5133217319b393c26772bd184465b6de686))
+* **simulation:** subscribe to every known Titan venue alias per pAMM ([0699dc9](https://github.com/propeller-heads/tycho/commit/0699dc9118ebf34425fad713ff9775f2c830ea2e))
+* **simulation:** Titan override timestamps, venue aliases and indexed-state fallback ([#1159](https://github.com/propeller-heads/tycho/issues/1159)) ([e999e0e](https://github.com/propeller-heads/tycho/commit/e999e0eca7229c872ade07521cce0f2c5c8c49ee))
+
 ## [0.324.0](https://github.com/propeller-heads/tycho/compare/0.323.0...0.324.0) (2026-07-06)
 
 
