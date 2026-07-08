@@ -2124,7 +2124,7 @@ mod tests {
         let expected_ua = format!("tycho-client-{}", env!("CARGO_PKG_VERSION"));
         let mock = server
             .mock("POST", "/v1/contract_state")
-            .match_header(CLIENT_METADATA_HEADER, "fynd_version=0.57.0; preset=best")
+            .match_header(CLIENT_METADATA_HEADER, "fynd_version=0.57.0;preset=best")
             .match_header("user-agent", expected_ua.as_str())
             .with_body(GET_CONTRACT_STATE_RESP)
             .expect(1)
@@ -2134,7 +2134,7 @@ mod tests {
         let client = HttpRPCClient::new(
             server.url().as_str(),
             HttpRPCClientOptions::default()
-                .with_client_metadata_header(Some("fynd_version=0.57.0; preset=best".to_string())),
+                .with_client_metadata_header(Some("fynd_version=0.57.0;preset=best".to_string())),
         )
         .expect("create client");
 

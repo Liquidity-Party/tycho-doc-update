@@ -39,7 +39,7 @@ pub(crate) enum ClientMetadataError {
 
 /// Serializes client metadata into the `X-Tycho-Client-Metadata` header value.
 ///
-/// Entries are emitted in key order as `key=value; key=value`. Returns `Ok(None)` for an empty
+/// Entries are emitted in key order as `key=value;key=value`. Returns `Ok(None)` for an empty
 /// map, meaning no header should be sent (back-compatible default). Keys must be non-empty and
 /// match `[A-Za-z0-9_.-]`; values must be non-empty visible ASCII excluding `;` and `=`. These
 /// rules are stricter than `HeaderValue::from_str`, so any accepted output is always a valid
@@ -69,7 +69,7 @@ pub(crate) fn serialize_client_metadata(
         }
         parts.push(format!("{key}={value}"));
     }
-    let serialized = parts.join("; ");
+    let serialized = parts.join(";");
     if serialized.len() > MAX_HEADER_BYTES {
         return Err(ClientMetadataError::HeaderTooLong(serialized.len()));
     }
@@ -110,7 +110,7 @@ mod tests {
         let meta = map(&[("preset", "best"), ("fynd_version", "0.57.0")]);
         assert_eq!(
             serialize_client_metadata(&meta),
-            Ok(Some("fynd_version=0.57.0; preset=best".to_string()))
+            Ok(Some("fynd_version=0.57.0;preset=best".to_string()))
         );
     }
 
