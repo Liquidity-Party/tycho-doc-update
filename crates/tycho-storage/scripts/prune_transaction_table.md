@@ -41,9 +41,22 @@ CALL cleanup_orphaned_transactions(
 );
 ```
 
-This is safe to run while the sync continues — every batch commits in seconds and yields via
-`lock_timeout` — but it competes for IO with the sync. Once drained, continue below to reclaim
-the disk.
+The same procedure serves both the daily cron and these manual drains — only the parameters
+differ.
+
+Timing trade-off: every batch commits in seconds and yields via `lock_timeout`, so running
+during the sync is safe and keeps the backlog from accumulating (100M+ dangling rows), but it
+competes with the sync for IO and slows it down. Running after lets the sync finish sooner but
+allows the backlog to build. Default to draining after the sync; switch to during if table
+growth or disk pressure becomes a concern.
+
+For an extreme backlog (orphans well beyond the retained row count) during a scheduled
+full-downtime window, a rebuild — copy referenced rows to a new table and drop the old one,
+the retired configmap script's approach — does O(retained) work instead of O(orphans) deletes.
+On PG 15 it needs the fleet at 0 anyway (partitioned referencers force FK revalidation inside
+the exclusive window), so treat it as a last resort for maintenance windows only.
+
+Once drained, continue below to reclaim the disk.
 
 ## Before either path
 

@@ -32,24 +32,28 @@ CREATE TABLE IF NOT EXISTS transaction_cleanup_progress(
 INSERT INTO transaction_cleanup_progress DEFAULT VALUES
 ON CONFLICT DO NOTHING;
 
--- p_min_age: rows younger than this (by inserted_ts) are skipped. 35 days = partman's 1-month
--- retention plus margin for month-length variance and late partition drops. NOTE: inserted_ts
--- is DB insertion time, so during a backfill freshly-inserted-but-already-orphaned rows are
--- skipped for 35 days; drain those with manual runs using a lower p_min_age (see
--- scripts/prune_transaction_table.md). inserted_ts is used (rather than chain time) because
--- the horizon binary search requires a timestamp monotone in id order, which chain time is not
--- when a newly added extractor backfills alongside live ones.
+-- p_min_age: rows younger than this (by inserted_ts) are skipped. NULL (the default) resolves
+-- to the largest pg_partman retention plus a 4-day margin for month-length variance and late
+-- partition drops (35 days under the current 1-month retention), so the horizon tracks
+-- retention changes automatically; 31+4 days is the fallback when partman has no retention
+-- configured. NOTE: inserted_ts is DB insertion time, so during a backfill
+-- freshly-inserted-but-already-orphaned rows are skipped until they age past the horizon;
+-- drain those with manual runs using a lower p_min_age (see scripts/prune_transaction_table.md).
+-- inserted_ts is used (rather than chain time) because the horizon binary search requires a
+-- timestamp monotone in id order, which chain time is not when a newly added extractor
+-- backfills alongside live ones.
 CREATE OR REPLACE PROCEDURE cleanup_orphaned_transactions(
     p_batch_size bigint DEFAULT 50000,
     p_time_budget interval DEFAULT '45 minutes',
-    p_min_age interval DEFAULT '35 days',
+    p_min_age interval DEFAULT NULL,
     p_lock_timeout text DEFAULT '2s'
 )
 LANGUAGE plpgsql
 AS $$
 DECLARE
     v_started timestamptz := clock_timestamp();
-    v_horizon_ts timestamptz := clock_timestamp() - p_min_age;
+    v_min_age interval;
+    v_horizon_ts timestamptz;
     v_lo bigint;
     v_hi bigint;
     v_mid bigint;
@@ -60,7 +64,51 @@ DECLARE
     v_batch_deleted bigint := 0;
     v_deleted bigint := 0;
     v_lock_failed boolean := false;
+    v_lock_retries integer := 0;
+    -- Every (table.column) referencing "transaction". Must stay in sync with the NOT EXISTS
+    -- probes below; sorted in COLLATE "C" order for the safeguard comparison.
+    v_expected_refs text[] := ARRAY[
+        'account.creation_tx',
+        'account.deletion_tx',
+        'account_balance.modify_tx',
+        'component_balance.modify_tx',
+        'contract_code.modify_tx',
+        'contract_storage.modify_tx',
+        'protocol_component.creation_tx',
+        'protocol_component.deletion_tx',
+        'protocol_state.modify_tx'];
+    v_actual_refs text[];
 BEGIN
+    IF p_min_age IS NOT NULL THEN
+        v_min_age := p_min_age;
+    ELSE
+        SELECT coalesce(max(retention::interval), interval '31 days') + interval '4 days'
+        INTO v_min_age
+        FROM partman.part_config
+        WHERE retention IS NOT NULL;
+    END IF;
+    v_horizon_ts := clock_timestamp() - v_min_age;
+
+    -- Safeguard: refuse to run if the set of foreign keys referencing "transaction" no longer
+    -- matches the probe list. Without this, a reference added by a future migration would let
+    -- the sweep cascade-delete (or error on) rows the new table still needs.
+    SELECT coalesce(array_agg(ref ORDER BY ref COLLATE "C"), '{}') INTO v_actual_refs
+    FROM (
+        SELECT DISTINCT r.relname || '.' || a.attname AS ref
+        FROM pg_constraint c
+        JOIN pg_class r ON r.oid = c.conrelid
+        CROSS JOIN LATERAL unnest(c.conkey) AS k(attnum)
+        JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.attnum
+        WHERE c.contype = 'f'
+          AND c.confrelid = '"transaction"'::regclass
+          AND c.conparentid = 0
+    ) refs;
+    IF v_actual_refs <> v_expected_refs THEN
+        RAISE EXCEPTION
+            'foreign keys referencing "transaction" (%) do not match the probe list (%); update cleanup_orphaned_transactions before running',
+            v_actual_refs, v_expected_refs;
+    END IF;
+
     SELECT min(id), max(id) INTO v_lo, v_hi FROM "transaction";
     IF v_lo IS NULL THEN
         RAISE NOTICE 'cleanup_orphaned_transactions: transaction table is empty';
@@ -68,9 +116,11 @@ BEGIN
     END IF;
 
     -- Binary-search the largest id older than the horizon (~40 single-row PK lookups).
-    -- Rows younger than the partman retention window cannot be orphans yet, so probing them
-    -- would be wasted IO. The NOT EXISTS checks below are the correctness gate; this is only
-    -- an optimization.
+    -- Under live indexing, rows younger than the retention window cannot be orphans yet (their
+    -- references cannot have been partition-dropped). During backfills young rows CAN already
+    -- be orphans; they are deliberately deferred until they age past the horizon (see the
+    -- p_min_age note above and the runbook). The NOT EXISTS checks below are the correctness
+    -- gate; this is only an optimization.
     WHILE v_lo < v_hi LOOP
         v_mid := (v_lo + v_hi + 1) / 2;
         SELECT inserted_ts INTO v_mid_ts
@@ -96,7 +146,7 @@ BEGIN
     LIMIT 1;
     IF v_mid_ts IS NULL OR v_mid_ts >= v_horizon_ts THEN
         RAISE NOTICE 'cleanup_orphaned_transactions: no rows older than %, nothing to do',
-            p_min_age;
+            v_min_age;
         RETURN;
     END IF;
 
@@ -145,10 +195,20 @@ BEGIN
         END;
 
         IF v_lock_failed THEN
-            RAISE NOTICE 'cleanup_orphaned_transactions: lock not available, yielding at id %',
-                v_cursor;
-            EXIT;
+            v_lock_failed := false;
+            v_lock_retries := v_lock_retries + 1;
+            IF v_lock_retries >= 3 THEN
+                RAISE NOTICE 'cleanup_orphaned_transactions: lock not available after % attempts, yielding at id %',
+                    v_lock_retries, v_cursor;
+                EXIT;
+            END IF;
+            -- The failed batch's subtransaction already rolled back; end the enclosing
+            -- transaction too so nothing (not even a snapshot) is held while backing off.
+            COMMIT;
+            PERFORM pg_sleep(30);
+            CONTINUE;
         END IF;
+        v_lock_retries := 0;
 
         v_deleted := v_deleted + v_batch_deleted;
         v_cursor := v_batch_end;
@@ -170,10 +230,11 @@ SELECT cron.unschedule(jobid)
 FROM cron.job
 WHERE command LIKE '%clean_transaction_table%';
 
--- 02:00 UTC keeps the run clear of partman's midnight maintenance; with the per-batch
--- lock_timeout even an overlap is harmless.
+-- Twice daily, clear of partman's midnight maintenance (with the per-batch lock_timeout even
+-- an overlap is harmless). Two 45-minute runs give roughly 3-10M deletions/day of capacity,
+-- comfortable margin over the ~2M/day steady-state orphan rate.
 SELECT cron.schedule(
     'cleanup_orphaned_transactions',
-    '0 2 * * *',
+    '0 2,14 * * *',
     'CALL cleanup_orphaned_transactions();'
 );
