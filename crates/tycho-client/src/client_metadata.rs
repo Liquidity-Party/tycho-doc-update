@@ -4,7 +4,7 @@
 //! WebSocket paths can never drift. The map is deliberately untyped: `tycho-client` never learns
 //! what the keys mean — consumers supply their own vocabulary.
 
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 use thiserror::Error;
 
@@ -45,7 +45,7 @@ pub(crate) enum ClientMetadataError {
 /// rules are stricter than `HeaderValue::from_str`, so any accepted output is always a valid
 /// header value and the RPC path can never fail on serialized input.
 pub(crate) fn serialize_client_metadata(
-    meta: &BTreeMap<String, String>,
+    meta: &HashMap<String, String>,
 ) -> Result<Option<String>, ClientMetadataError> {
     if meta.is_empty() {
         return Ok(None);
@@ -53,8 +53,11 @@ pub(crate) fn serialize_client_metadata(
     if meta.len() > MAX_ENTRIES {
         return Err(ClientMetadataError::TooManyEntries(meta.len()));
     }
-    let mut parts = Vec::with_capacity(meta.len());
-    for (key, value) in meta {
+    // Sort by key so the serialized header is deterministic regardless of map iteration order.
+    let mut entries: Vec<_> = meta.iter().collect();
+    entries.sort_by_key(|(k, _)| *k);
+    let mut parts = Vec::with_capacity(entries.len());
+    for (key, value) in entries {
         if !is_valid_key(key) {
             return Err(ClientMetadataError::InvalidKey(key.clone()));
         }
@@ -93,7 +96,7 @@ fn is_valid_value(value: &str) -> bool {
 mod tests {
     use super::*;
 
-    fn map(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
+    fn map(pairs: &[(&str, &str)]) -> HashMap<String, String> {
         pairs
             .iter()
             .map(|(k, v)| (k.to_string(), v.to_string()))
@@ -102,7 +105,7 @@ mod tests {
 
     #[test]
     fn empty_map_yields_no_header() {
-        assert_eq!(serialize_client_metadata(&BTreeMap::new()), Ok(None));
+        assert_eq!(serialize_client_metadata(&HashMap::new()), Ok(None));
     }
 
     #[test]
@@ -141,7 +144,7 @@ mod tests {
 
     #[test]
     fn rejects_too_many_entries() {
-        let meta: BTreeMap<String, String> = (0..MAX_ENTRIES + 1)
+        let meta: HashMap<String, String> = (0..MAX_ENTRIES + 1)
             .map(|i| (format!("k{i}"), "v".to_string()))
             .collect();
         assert_eq!(
@@ -176,7 +179,7 @@ mod tests {
     fn rejects_overlong_header() {
         // Nine entries, each value at the per-value cap, exceed the 1 KiB header cap.
         let value = "a".repeat(MAX_VALUE_BYTES);
-        let meta: BTreeMap<String, String> = (0..9)
+        let meta: HashMap<String, String> = (0..9)
             .map(|i| (format!("key{i}"), value.clone()))
             .collect();
         assert!(matches!(

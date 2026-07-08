@@ -1,6 +1,6 @@
 use std::{
     cmp::max,
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{HashMap, HashSet},
     env,
     time::Duration,
 };
@@ -72,7 +72,7 @@ pub struct TychoStreamBuilder {
     compression: bool,
     partial_blocks: bool,
     max_messages: Option<usize>,
-    client_metadata: BTreeMap<String, String>,
+    client_metadata: HashMap<String, String>,
 }
 
 impl TychoStreamBuilder {
@@ -104,7 +104,7 @@ impl TychoStreamBuilder {
             compression: true,
             partial_blocks: false,
             max_messages: None,
-            client_metadata: BTreeMap::new(),
+            client_metadata: HashMap::new(),
         }
     }
 
