@@ -185,7 +185,8 @@ contract EkuboV3Executor is IExecutor, ICallback {
     }
 
     function getCallbackTransferData(
-        bytes calldata, /* data */
+        bytes calldata,
+        /* data */
         address tokenIn,
         address /* caller */
     )
@@ -234,16 +235,6 @@ contract EkuboV3Executor is IExecutor, ICallback {
             PoolConfig poolConfig =
                 PoolConfig.wrap(LibBytes.loadCalldata(swapData, offset + 20));
 
-            if (poolConfig.extension() == SIGNED_EXCLUSIVE_SWAP_ADDRESS) {
-                // TODO: read meta(32), minBalanceUpdate(32), sigLen(2),
-                // signature(sigLen) from swapData;
-                // CORE.forward(extension, abi.encode(pk, swapParameters,
-                // bytes32 meta, bytes32 minBalanceUpdate, signature)); then chain
-                // nextAmountIn from the returned balanceUpdate and advance offset
-                // by 52 + 64 + 2 + sigLen.
-                revert("TODO: signed Ekubo swap not implemented");
-            }
-
             (
                 address token0,
                 address token1,
@@ -265,7 +256,46 @@ contract EkuboV3Executor is IExecutor, ICallback {
 
             PoolBalanceUpdate balanceUpdate;
 
-            if (poolConfig.extension() == MEV_CAPTURE_ADDRESS) {
+            if (poolConfig.extension() == SIGNED_EXCLUSIVE_SWAP_ADDRESS) {
+                // Signed hop tail: meta(32) | minBU(32) |
+                // sigLen(2) | sig(sigLen)
+                uint256 tailOff = offset + _HOP_BYTE_LEN;
+                uint256 sigLenOff = tailOff + _SIGNED_FIXED_TAIL_LEN;
+                if (sigLenOff + _SIG_LEN_BYTES > swapData.length) {
+                    revert EkuboV3Executor__InvalidDataLength();
+                }
+                uint256 sigLen = uint256(
+                    uint16(
+                        bytes2(swapData[sigLenOff:sigLenOff + _SIG_LEN_BYTES])
+                    )
+                );
+                uint256 sigEnd = sigLenOff + _SIG_LEN_BYTES + sigLen;
+                if (sigEnd > swapData.length) {
+                    revert EkuboV3Executor__InvalidDataLength();
+                }
+
+                // slither-disable-next-line calls-loop
+                (balanceUpdate,) = abi.decode(
+                    CORE.forward(
+                        SIGNED_EXCLUSIVE_SWAP_ADDRESS,
+                        abi.encode(
+                            pk,
+                            swapParameters,
+                            // SignedSwapMeta (uint256)
+                            uint256(bytes32(swapData[tailOff:tailOff + 32])),
+                            // minBalanceUpdate
+                            PoolBalanceUpdate.wrap(
+                                bytes32(swapData[tailOff + 32:tailOff + 64])
+                            ),
+                            // signature
+                            bytes(swapData[sigLenOff + _SIG_LEN_BYTES:sigEnd])
+                        )
+                    ),
+                    (PoolBalanceUpdate, PoolState)
+                );
+
+                offset = sigEnd;
+            } else if (poolConfig.extension() == MEV_CAPTURE_ADDRESS) {
                 (balanceUpdate,) = abi.decode(
                     // slither-disable-next-line calls-loop
                     CORE.forward(
@@ -273,17 +303,17 @@ contract EkuboV3Executor is IExecutor, ICallback {
                     ),
                     (PoolBalanceUpdate, PoolState)
                 );
+                offset += _HOP_BYTE_LEN;
             } else {
                 PoolState _stateAfter;
                 // slither-disable-next-line calls-loop
                 (balanceUpdate, _stateAfter) = CORE.swap(0, pk, swapParameters);
+                offset += _HOP_BYTE_LEN;
             }
 
             nextTokenIn = nextTokenOut;
             nextAmountIn =
             -(isToken1 ? balanceUpdate.delta0() : balanceUpdate.delta1());
-
-            offset += _HOP_BYTE_LEN;
         }
 
         _pay(tokenIn, amountIn);

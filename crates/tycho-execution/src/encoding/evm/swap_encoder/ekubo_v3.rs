@@ -66,21 +66,24 @@ impl SwapEncoder for EkuboV3SwapEncoder {
         // A signed (SignedExclusiveSwap, forward-only) hop carries a self-describing tail so the
         // executor's length-aware walk can skip past it to any following hop. When `user_data` is
         // absent the hop is byte-identical to a normal hop, preserving existing behavior.
-        if swap.user_data().is_some() {
-            // TODO: split user_data into meta(32) | minBalanceUpdate(32) | signature(N),
-            // then append meta | minBalanceUpdate | (signature length as u16 be) | signature.
-            // The `#[allow]` covers the warnings inherent to a diverging `todo!()` scaffold: the
-            // binding is "unused" and the `extend` call is "unreachable" only until this is
-            // implemented. Remove the attribute together with the `todo!()`.
-            #[allow(
-                unreachable_code,
-                unused_variables,
-                reason = "scaffold: todo!() diverges until the signed tail is implemented"
-            )]
-            {
-                let signed_tail: Vec<u8> = todo!("encode signed-swap tail from swap.user_data()");
-                encoded.extend(signed_tail);
+        if let Some(user_data) = swap.user_data() {
+            // user_data layout: meta(32) | minBalanceUpdate(32) | signature(N)
+            // Wire format:      meta(32) | minBalanceUpdate(32) | sigLen(u16 be) | signature(N)
+            const SIGNED_FIXED_PREFIX: usize = 64;
+            if user_data.len() < SIGNED_FIXED_PREFIX {
+                return Err(EncodingError::FatalError(
+                    "signed swap user_data must be at least 64 bytes (meta + minBalanceUpdate)"
+                        .to_string(),
+                ));
             }
+            let signature = &user_data[SIGNED_FIXED_PREFIX..];
+            let sig_len = u16::try_from(signature.len()).map_err(|_| {
+                EncodingError::FatalError("signature length exceeds u16::MAX".to_string())
+            })?;
+
+            encoded.extend_from_slice(&user_data[..SIGNED_FIXED_PREFIX]);
+            encoded.extend_from_slice(&sig_len.to_be_bytes());
+            encoded.extend_from_slice(signature);
         }
 
         Ok(encoded)
@@ -154,7 +157,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "scaffold: signed-swap tail encoding is not yet implemented (todo!())"]
     fn test_encode_signed_swap() {
         let token_in = Bytes::from(Address::ZERO.as_slice());
         let token_out = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
@@ -171,8 +173,7 @@ mod tests {
         // `user_data` is the packed concatenation meta(32) | minBalanceUpdate(32) | signature(N).
         // The encoder splits it and inserts the 2-byte big-endian signature length.
         let meta = "1111111111111111111111111111111111111111111111111111111111111111";
-        let min_balance_update =
-            "2222222222222222222222222222222222222222222222222222222222222222";
+        let min_balance_update = "2222222222222222222222222222222222222222222222222222222222222222";
         let signature = "abcdef0123456789"; // 8-byte signature
         let user_data =
             Bytes::from_str(&format!("0x{meta}{min_balance_update}{signature}")).unwrap();
