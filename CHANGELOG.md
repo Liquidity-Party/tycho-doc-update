@@ -1,3 +1,12 @@
+## [0.328.0](https://github.com/propeller-heads/tycho/compare/0.327.0...0.328.0) (2026-07-08)
+
+
+### Features
+
+* support Bebop router contract in BebopExecutor ([1fa99f8](https://github.com/propeller-heads/tycho/commit/1fa99f8574507ecbabed215c0f0f06850e68b25d))
+* support Bebop router contract in BebopExecutor ([#1150](https://github.com/propeller-heads/tycho/issues/1150)) ([073f808](https://github.com/propeller-heads/tycho/commit/073f80803a6e5f5231d29f7302ac81aff6bb45fd))
+* update bebop executor address ([4af6d02](https://github.com/propeller-heads/tycho/commit/4af6d0273b085433c9d1df2c01a84fc0bc1497f7))
+
 ## [0.327.0](https://github.com/propeller-heads/tycho/compare/0.326.0...0.327.0) (2026-07-07)
 
 
