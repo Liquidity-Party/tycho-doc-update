@@ -203,7 +203,7 @@ mod tests {
             ("endpoint", "/v1/health"),
             ("user_identity", "alice"),
             ("fynd_version", "none"),
-            ("preset", "none"),
+            ("fynd_preset", "none"),
         ];
         assert_eq!(
             counter_value(&after, "rpc_requests", &success_labels) -
@@ -216,7 +216,7 @@ mod tests {
             ("status", "400"),
             ("user_identity", "alice"),
             ("fynd_version", "none"),
-            ("preset", "none"),
+            ("fynd_preset", "none"),
         ];
         assert_eq!(
             counter_value(&after, "rpc_requests_failed", &no_failure_labels),
@@ -240,7 +240,7 @@ mod tests {
             .insert_header(("user-identity", "alice"))
             .insert_header((
                 "x-tycho-client-metadata",
-                "fynd_version=1.2.3; preset=fast; secret=xyz",
+                "fynd_version=1.2.3; fynd_preset=fast; secret=xyz",
             ))
             .to_request();
         let response = test::call_service(&app, request).await;
@@ -252,7 +252,7 @@ mod tests {
             ("endpoint", "/v1/health"),
             ("user_identity", "alice"),
             ("fynd_version", "1.2.3"),
-            ("preset", "fast"),
+            ("fynd_preset", "fast"),
         ];
         assert_eq!(
             counter_value(&after, "rpc_requests", &metadata_labels) -
@@ -264,7 +264,7 @@ mod tests {
             ("endpoint", "/v1/health"),
             ("user_identity", "alice"),
             ("fynd_version", "1.2.3"),
-            ("preset", "fast"),
+            ("fynd_preset", "fast"),
             ("secret", "xyz"),
         ];
         assert_eq!(counter_value(&after, "rpc_requests", &with_secret), 0);
@@ -287,7 +287,7 @@ mod tests {
             ("endpoint", "/v1/fail"),
             ("user_identity", "unknown"),
             ("fynd_version", "none"),
-            ("preset", "none"),
+            ("fynd_preset", "none"),
         ];
         assert_eq!(
             counter_value(&after, "rpc_requests", &fail_request_labels) -
@@ -300,7 +300,7 @@ mod tests {
             ("status", expected_status.as_str()),
             ("user_identity", "unknown"),
             ("fynd_version", "none"),
-            ("preset", "none"),
+            ("fynd_preset", "none"),
         ];
         assert_eq!(
             counter_value(&after, "rpc_requests_failed", &fail_labels) -

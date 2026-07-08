@@ -21,7 +21,7 @@ pub(in crate::services) const CLIENT_METADATA_HEADER: &str = "x-tycho-client-met
 /// Metadata keys projected onto Prometheus labels. This is a projection policy, not an
 /// interpretation of the values: the server decides which keys become labels (bounding label
 /// names) but never inspects what they mean. Adding a key multiplies series count.
-pub(in crate::services) const METADATA_METRIC_KEYS: &[&str] = &["fynd_version", "preset"];
+pub(in crate::services) const METADATA_METRIC_KEYS: &[&str] = &["fynd_version", "fynd_preset"];
 
 // Defensive caps mirroring the client serializer (by value, not by crate dependency).
 const MAX_ENTRIES: usize = 16;
@@ -94,8 +94,8 @@ mod tests {
 
     #[test]
     fn parses_and_trims_pairs() {
-        let parsed = parse_client_metadata("fynd_version=1.2.3; preset=fast");
-        assert_eq!(parsed, map(&[("fynd_version", "1.2.3"), ("preset", "fast")]));
+        let parsed = parse_client_metadata("fynd_version=1.2.3; fynd_preset=fast");
+        assert_eq!(parsed, map(&[("fynd_version", "1.2.3"), ("fynd_preset", "fast")]));
     }
 
     #[test]
@@ -130,21 +130,22 @@ mod tests {
     #[test]
     fn labels_default_to_none_when_absent() {
         let labels = labels_map(&BTreeMap::new());
-        assert_eq!(labels, map(&[("fynd_version", "none"), ("preset", "none")]));
+        assert_eq!(labels, map(&[("fynd_version", "none"), ("fynd_preset", "none")]));
     }
 
     #[test]
     fn labels_pass_through_values_verbatim() {
         // The server never interprets values, so any string on an allowlisted key is emitted as-is
         // (after the parser's size caps). Value semantics are the client's concern.
-        let labels = labels_map(&map(&[("fynd_version", "not-a-version"), ("preset", "turbo")]));
-        assert_eq!(labels, map(&[("fynd_version", "not-a-version"), ("preset", "turbo")]));
+        let labels =
+            labels_map(&map(&[("fynd_version", "not-a-version"), ("fynd_preset", "turbo")]));
+        assert_eq!(labels, map(&[("fynd_version", "not-a-version"), ("fynd_preset", "turbo")]));
     }
 
     #[test]
     fn labels_omit_non_allowlisted_keys() {
-        let labels = labels_map(&map(&[("secret", "abc"), ("preset", "fast")]));
-        assert_eq!(labels, map(&[("fynd_version", "none"), ("preset", "fast")]));
+        let labels = labels_map(&map(&[("secret", "abc"), ("fynd_preset", "fast")]));
+        assert_eq!(labels, map(&[("fynd_version", "none"), ("fynd_preset", "fast")]));
         assert!(!labels.contains_key("secret"));
     }
 }
