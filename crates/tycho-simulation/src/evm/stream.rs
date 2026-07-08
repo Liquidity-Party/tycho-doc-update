@@ -102,7 +102,7 @@
 //! }
 //! ```
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{HashMap, HashSet},
     sync::Arc,
     time,
 };
@@ -460,30 +460,21 @@ impl ProtocolStreamBuilder {
         self
     }
 
-    /// Sets the client metadata forwarded to the server in the `X-Tycho-Client-Metadata` header.
+    /// Adds client-metadata entries forwarded to the server in the `X-Tycho-Client-Metadata`
+    /// header.
     ///
-    /// See [`TychoStreamBuilder::client_metadata`]. Values are self-reported and may surface in the
-    /// server's metrics and logs — do not include secrets or personally identifiable information.
-    pub fn client_metadata(mut self, metadata: BTreeMap<String, String>) -> Self {
-        self.stream_builder = self
-            .stream_builder
-            .client_metadata(metadata);
-        self
-    }
-
-    /// Adds a single client-metadata entry, keeping any previously set entries.
-    ///
-    /// See [`TychoStreamBuilder::client_metadata_entry`]. Values are self-reported and may surface
-    /// in the server's metrics and logs — do not include secrets or personally identifiable
+    /// See [`TychoStreamBuilder::add_client_metadata`]. Values are self-reported and may surface in
+    /// the server's metrics and logs — do not include secrets or personally identifiable
     /// information.
-    pub fn client_metadata_entry(
-        mut self,
-        key: impl Into<String>,
-        value: impl Into<String>,
-    ) -> Self {
+    pub fn add_client_metadata<I, K, V>(mut self, metadata: I) -> Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: Into<String>,
+        V: Into<String>,
+    {
         self.stream_builder = self
             .stream_builder
-            .client_metadata_entry(key, value);
+            .add_client_metadata(metadata);
         self
     }
 
@@ -977,6 +968,29 @@ mod tests {
             !second.states.contains_key(&expected_id),
             "second message should NOT have native_wrapper state"
         );
+    }
+
+    /// Verifies `ProtocolStreamBuilder` forwards client metadata to the wrapped
+    /// `TychoStreamBuilder`: an invalid entry is only rejected if it was forwarded to the inner
+    /// builder, and the rejection happens at `build()` before any network I/O.
+    #[tokio::test]
+    async fn test_client_metadata_passthrough_fails_fast_on_invalid() {
+        use std::time::Duration;
+
+        use crate::evm::protocol::uniswap_v2::state::UniswapV2State;
+
+        let build = ProtocolStreamBuilder::new("localhost:4242", Chain::Ethereum)
+            .exchange::<UniswapV2State>(
+                "uniswap_v2",
+                ComponentFilter::with_tvl_range(100.0, 100.0),
+                None,
+            )
+            .add_client_metadata([("bad key", "v")])
+            .build();
+        let result = tokio::time::timeout(Duration::from_secs(2), build)
+            .await
+            .expect("build should fail fast without network I/O");
+        assert!(matches!(result, Err(StreamError::SetUpError(_))));
     }
 
     /// Verifies that `with_step_controller` returns both a modified builder and a controller.

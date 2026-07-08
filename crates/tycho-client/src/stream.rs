@@ -192,30 +192,26 @@ impl TychoStreamBuilder {
         self
     }
 
-    /// Sets the client metadata sent to the server in the `X-Tycho-Client-Metadata` header.
+    /// Adds client-metadata entries sent to the server in the `X-Tycho-Client-Metadata` header.
     ///
-    /// The map is opaque to tycho-client; consumers supply their own keys. Replaces any
-    /// previously set metadata. An empty map sends no header. Invalid keys/values and oversized
-    /// metadata are rejected at `build()` time.
-    ///
-    /// Values are self-reported and may surface in the server's metrics and logs. Do not include
-    /// secrets or personally identifiable information.
-    pub fn client_metadata(mut self, metadata: BTreeMap<String, String>) -> Self {
-        self.client_metadata = metadata;
-        self
-    }
-
-    /// Adds a single client-metadata entry, keeping any previously set entries.
+    /// The metadata is opaque to tycho-client; consumers supply their own keys. Accepts any
+    /// iterator of key/value pairs and inserts each entry, keeping previously set metadata. An
+    /// empty map sends no header. Invalid keys/values and oversized metadata are rejected at
+    /// `build()` time.
     ///
     /// Values are self-reported and may surface in the server's metrics and logs. Do not include
     /// secrets or personally identifiable information.
-    pub fn client_metadata_entry(
-        mut self,
-        key: impl Into<String>,
-        value: impl Into<String>,
-    ) -> Self {
-        self.client_metadata
-            .insert(key.into(), value.into());
+    pub fn add_client_metadata<I, K, V>(mut self, metadata: I) -> Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: Into<String>,
+        V: Into<String>,
+    {
+        self.client_metadata.extend(
+            metadata
+                .into_iter()
+                .map(|(k, v)| (k.into(), v.into())),
+        );
         self
     }
 
@@ -559,10 +555,10 @@ mod tests {
     }
 
     #[test]
-    fn test_client_metadata_entry_accumulates() {
+    fn test_add_client_metadata_accumulates() {
         let builder = TychoStreamBuilder::new("localhost:4242", Chain::Ethereum)
-            .client_metadata_entry("fynd_version", "0.57.0")
-            .client_metadata_entry("preset", "best");
+            .add_client_metadata([("fynd_version", "0.57.0")])
+            .add_client_metadata([("preset", "best")]);
         assert_eq!(
             builder
                 .client_metadata
@@ -583,7 +579,7 @@ mod tests {
     async fn test_build_fails_fast_on_invalid_metadata() {
         let build = TychoStreamBuilder::new("localhost:4242", Chain::Ethereum)
             .exchange("uniswap_v2", ComponentFilter::with_tvl_range(100.0, 100.0))
-            .client_metadata_entry("bad key", "v")
+            .add_client_metadata([("bad key", "v")])
             .build();
         // Serialization happens before any network I/O, so an invalid entry must fail fast.
         let res = tokio::time::timeout(Duration::from_secs(2), build)
