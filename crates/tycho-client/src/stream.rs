@@ -196,8 +196,8 @@ impl TychoStreamBuilder {
     ///
     /// The metadata is opaque to tycho-client; consumers supply their own keys. Accepts any
     /// iterator of key/value pairs and inserts each entry, keeping previously set metadata. An
-    /// empty map sends no header. Invalid keys/values and oversized metadata are rejected at
-    /// `build()` time.
+    /// empty map sends no header. Invalid keys/values and oversized metadata are dropped with a
+    /// warning at `build()` time, sending no header.
     ///
     /// Values are self-reported and may surface in the server's metrics and logs. Do not include
     /// secrets or personally identifiable information.
@@ -282,9 +282,13 @@ impl TychoStreamBuilder {
             ));
         }
 
-        // Serialize client metadata once, before any network I/O, so invalid input fails fast.
-        let metadata_header = serialize_client_metadata(&self.client_metadata)
-            .map_err(|e| StreamError::SetUpError(format!("Invalid client metadata: {e}")))?;
+        // Serialize client metadata once, before any network I/O. Metadata is best-effort
+        // telemetry, so invalid input is dropped with a warning rather than failing the stream.
+        let metadata_header =
+            serialize_client_metadata(&self.client_metadata).unwrap_or_else(|e| {
+                warn!("Ignoring invalid client metadata: {e}");
+                None
+            });
 
         // Attempt to read the authentication key from the environment variable if not provided
         let auth_key = self
@@ -573,19 +577,6 @@ mod tests {
                 .map(String::as_str),
             Some("best")
         );
-    }
-
-    #[tokio::test]
-    async fn test_build_fails_fast_on_invalid_metadata() {
-        let build = TychoStreamBuilder::new("localhost:4242", Chain::Ethereum)
-            .exchange("uniswap_v2", ComponentFilter::with_tvl_range(100.0, 100.0))
-            .add_client_metadata([("bad key", "v")])
-            .build();
-        // Serialization happens before any network I/O, so an invalid entry must fail fast.
-        let res = tokio::time::timeout(Duration::from_secs(2), build)
-            .await
-            .expect("build should fail fast without network I/O");
-        assert!(matches!(res, Err(StreamError::SetUpError(_))));
     }
 
     #[ignore = "require tycho gateway"]
