@@ -2,9 +2,11 @@
 //!
 //! Clients send an opaque `key=value; key=value` map. The server parses it generically, applies
 //! defensive size caps (never trusting the client to have validated), and projects a small
-//! allowlist of keys into Prometheus labels. Because label *values* are client-controlled, each
-//! allowlisted key has a per-key validator that collapses unexpected input to a bounded token, so
-//! a malicious client cannot inflate metric cardinality.
+//! allowlist of keys into Prometheus labels. Values are emitted verbatim (after the caps): the
+//! server never interprets them, so it stays free of any client-specific vocabulary. The allowlist
+//! bounds label *names*, which is what protects the in-process metrics registry from being flooded
+//! with arbitrary series; bounding label *value* cardinality, if ever needed, is left to the
+//! Prometheus scrape layer.
 //!
 //! This mirrors the client serializer in `tycho-client` but deliberately does not depend on that
 //! crate, so the two can ship independently.
@@ -16,11 +18,10 @@ use metrics::Label;
 /// Header carrying generic client metadata.
 pub(in crate::services) const CLIENT_METADATA_HEADER: &str = "x-tycho-client-metadata";
 
-/// Allowlisted metadata keys promoted to Prometheus labels. Adding a key multiplies series count.
+/// Metadata keys projected onto Prometheus labels. This is a projection policy, not an
+/// interpretation of the values: the server decides which keys become labels (bounding label
+/// names) but never inspects what they mean. Adding a key multiplies series count.
 pub(in crate::services) const METADATA_METRIC_KEYS: &[&str] = &["fynd_version", "preset"];
-
-/// Known Fynd presets; any other `preset` value collapses to `"other"`.
-const KNOWN_PRESETS: &[&str] = &["best", "fast", "deep", "none"];
 
 // Defensive caps mirroring the client serializer (by value, not by crate dependency).
 const MAX_ENTRIES: usize = 16;
@@ -56,61 +57,21 @@ pub(in crate::services) fn parse_client_metadata(raw: &str) -> BTreeMap<String, 
     out
 }
 
-/// Builds the bounded Prometheus labels for every allowlisted metadata key, in allowlist order.
-/// Missing keys yield `"none"`; present values are validated per key and collapsed to
-/// `"other"`/`"invalid"` when they don't match, so client-controlled strings can never inflate
-/// label cardinality. Non-allowlisted keys are never emitted.
+/// Builds the Prometheus labels for every allowlisted metadata key, in allowlist order. Missing
+/// keys yield `"none"`; present values are emitted verbatim (already size-capped by the parser).
+/// Non-allowlisted keys are never emitted.
 pub(in crate::services) fn metric_labels(metadata: &BTreeMap<String, String>) -> Vec<Label> {
     METADATA_METRIC_KEYS
         .iter()
-        .map(|&key| Label::new(key, label_value(key, metadata.get(key).map(String::as_str))))
+        .map(|&key| {
+            let value = metadata
+                .get(key)
+                .map(String::as_str)
+                .unwrap_or("none")
+                .to_owned();
+            Label::new(key, value)
+        })
         .collect()
-}
-
-fn label_value(key: &str, value: Option<&str>) -> String {
-    let Some(value) = value else {
-        return "none".to_string();
-    };
-    match key {
-        "preset" => {
-            if KNOWN_PRESETS.contains(&value) {
-                value.to_string()
-            } else {
-                "other".to_string()
-            }
-        }
-        "fynd_version" => {
-            if is_version_prefix(value) {
-                value.to_string()
-            } else {
-                "invalid".to_string()
-            }
-        }
-        _ => "invalid".to_string(),
-    }
-}
-
-/// Returns true if `value` starts with `MAJOR.MINOR.PATCH` (each numeric), matching
-/// `^[0-9]+\.[0-9]+\.[0-9]+`.
-fn is_version_prefix(value: &str) -> bool {
-    let mut rest = value;
-    for i in 0..3 {
-        let digits = rest
-            .bytes()
-            .take_while(|b| b.is_ascii_digit())
-            .count();
-        if digits == 0 {
-            return false;
-        }
-        rest = &rest[digits..];
-        if i < 2 {
-            match rest.strip_prefix('.') {
-                Some(r) => rest = r,
-                None => return false,
-            }
-        }
-    }
-    true
 }
 
 #[cfg(test)]
@@ -173,15 +134,11 @@ mod tests {
     }
 
     #[test]
-    fn labels_pass_through_valid_values() {
-        let labels = labels_map(&map(&[("fynd_version", "0.57.0"), ("preset", "best")]));
-        assert_eq!(labels, map(&[("fynd_version", "0.57.0"), ("preset", "best")]));
-    }
-
-    #[test]
-    fn labels_collapse_unexpected_values() {
+    fn labels_pass_through_values_verbatim() {
+        // The server never interprets values, so any string on an allowlisted key is emitted as-is
+        // (after the parser's size caps). Value semantics are the client's concern.
         let labels = labels_map(&map(&[("fynd_version", "not-a-version"), ("preset", "turbo")]));
-        assert_eq!(labels, map(&[("fynd_version", "invalid"), ("preset", "other")]));
+        assert_eq!(labels, map(&[("fynd_version", "not-a-version"), ("preset", "turbo")]));
     }
 
     #[test]
@@ -189,22 +146,5 @@ mod tests {
         let labels = labels_map(&map(&[("secret", "abc"), ("preset", "fast")]));
         assert_eq!(labels, map(&[("fynd_version", "none"), ("preset", "fast")]));
         assert!(!labels.contains_key("secret"));
-    }
-
-    #[test]
-    fn version_prefix_accepts_major_minor_patch() {
-        assert!(is_version_prefix("1.2.3"));
-        assert!(is_version_prefix("0.57.0"));
-        assert!(is_version_prefix("1.2.3-rc1"));
-        assert!(is_version_prefix("10.20.30.40"));
-    }
-
-    #[test]
-    fn version_prefix_rejects_non_semver() {
-        assert!(!is_version_prefix("1.2"));
-        assert!(!is_version_prefix("1.2.x"));
-        assert!(!is_version_prefix("v1.2.3"));
-        assert!(!is_version_prefix(""));
-        assert!(!is_version_prefix("abc"));
     }
 }
