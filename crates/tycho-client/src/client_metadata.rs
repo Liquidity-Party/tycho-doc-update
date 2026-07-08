@@ -22,7 +22,7 @@ pub const MAX_VALUE_BYTES: usize = 128;
 pub const MAX_HEADER_BYTES: usize = 1024;
 
 #[derive(Debug, Error, PartialEq, Eq)]
-pub enum ClientMetadataError {
+pub(crate) enum ClientMetadataError {
     #[error("invalid client metadata key: {0:?}")]
     InvalidKey(String),
     #[error("invalid client metadata value: {0:?}")]
@@ -44,7 +44,7 @@ pub enum ClientMetadataError {
 /// match `[A-Za-z0-9_.-]`; values must be non-empty visible ASCII excluding `;` and `=`. These
 /// rules are stricter than `HeaderValue::from_str`, so any accepted output is always a valid
 /// header value and the RPC path can never fail on serialized input.
-pub fn serialize_client_metadata(
+pub(crate) fn serialize_client_metadata(
     meta: &BTreeMap<String, String>,
 ) -> Result<Option<String>, ClientMetadataError> {
     if meta.is_empty() {
