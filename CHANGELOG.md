@@ -1,3 +1,11 @@
+## [0.330.1](https://github.com/propeller-heads/tycho/compare/0.330.0...0.330.1) (2026-07-09)
+
+
+### Bug Fixes
+
+* remove liquidityparty executor address ([c7cb94e](https://github.com/propeller-heads/tycho/commit/c7cb94e82e4dd822476c1e97b48d31b728496c3a))
+* remove liquidityparty executor address ([#1169](https://github.com/propeller-heads/tycho/issues/1169)) ([7f9e642](https://github.com/propeller-heads/tycho/commit/7f9e6423e4e02528de169e2953f897f544ace1a8))
+
 ## [0.330.0](https://github.com/propeller-heads/tycho/compare/0.329.1...0.330.0) (2026-07-09)
 
 
