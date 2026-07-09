@@ -289,7 +289,7 @@ dependencies = [
 
 [[package]]
 name = "base-lunarbase"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "ethabi 18.0.0",
@@ -773,7 +773,7 @@ dependencies = [
 
 [[package]]
 name = "ethereum-balancer-v3"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "anyhow",
  "ethabi 18.0.0",
@@ -845,7 +845,7 @@ dependencies = [
 
 [[package]]
 name = "ethereum-ekubo-v2"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "ethabi 18.0.0",
@@ -864,7 +864,7 @@ dependencies = [
 
 [[package]]
 name = "ethereum-ekubo-v3"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "alloy-primitives",
  "anyhow",
@@ -954,7 +954,7 @@ dependencies = [
 
 [[package]]
 name = "ethereum-liquidityparty"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "ethabi 18.0.0",
