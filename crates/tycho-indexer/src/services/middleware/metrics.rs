@@ -34,6 +34,14 @@ where
 
     Span::current().record("user_identity", &user_identity);
 
+    // Mirrors the WS `client_version` label (raw User-Agent), defaulting to a bounded sentinel.
+    let client_version = req
+        .headers()
+        .get("user-agent")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("unknown")
+        .to_string();
+
     let metadata = client_metadata::parse_client_metadata(
         req.headers()
             .get(client_metadata::CLIENT_METADATA_HEADER)
@@ -45,6 +53,7 @@ where
     let mut request_labels = vec![
         Label::new("endpoint", endpoint.clone()),
         Label::new("user_identity", user_identity.clone()),
+        Label::new("client_version", client_version.clone()),
     ];
     request_labels.extend(metadata_labels.iter().cloned());
     counter!("rpc_requests", request_labels).increment(1);
@@ -64,6 +73,7 @@ where
                     Label::new("endpoint", endpoint.clone()),
                     Label::new("status", srv_res.status().as_u16().to_string()),
                     Label::new("user_identity", user_identity.clone()),
+                    Label::new("client_version", client_version.clone()),
                 ];
                 fail_labels.extend(metadata_labels.iter().cloned());
                 counter!("rpc_requests_failed", fail_labels).increment(1);
@@ -79,6 +89,7 @@ where
                 Label::new("endpoint", endpoint.clone()),
                 Label::new("status", status.to_string()),
                 Label::new("user_identity", user_identity.clone()),
+                Label::new("client_version", client_version.clone()),
             ];
             fail_labels.extend(metadata_labels.iter().cloned());
             counter!("rpc_requests_failed", fail_labels).increment(1);
@@ -202,6 +213,7 @@ mod tests {
         let success_labels = [
             ("endpoint", "/v1/health"),
             ("user_identity", "alice"),
+            ("client_version", "unknown"),
             ("fynd_version", "none"),
             ("fynd_preset", "none"),
         ];
@@ -215,6 +227,7 @@ mod tests {
             ("endpoint", "/v1/health"),
             ("status", "400"),
             ("user_identity", "alice"),
+            ("client_version", "unknown"),
             ("fynd_version", "none"),
             ("fynd_preset", "none"),
         ];
@@ -238,6 +251,7 @@ mod tests {
         let request = test::TestRequest::get()
             .uri("/v1/health")
             .insert_header(("user-identity", "alice"))
+            .insert_header(("user-agent", "tycho-client-1.0"))
             .insert_header((
                 "x-tycho-client-metadata",
                 "fynd_version=1.2.3; fynd_preset=fast; secret=xyz",
@@ -251,6 +265,7 @@ mod tests {
         let metadata_labels = [
             ("endpoint", "/v1/health"),
             ("user_identity", "alice"),
+            ("client_version", "tycho-client-1.0"),
             ("fynd_version", "1.2.3"),
             ("fynd_preset", "fast"),
         ];
@@ -263,6 +278,7 @@ mod tests {
         let with_secret = [
             ("endpoint", "/v1/health"),
             ("user_identity", "alice"),
+            ("client_version", "tycho-client-1.0"),
             ("fynd_version", "1.2.3"),
             ("fynd_preset", "fast"),
             ("secret", "xyz"),
@@ -286,6 +302,7 @@ mod tests {
         let fail_request_labels = [
             ("endpoint", "/v1/fail"),
             ("user_identity", "unknown"),
+            ("client_version", "unknown"),
             ("fynd_version", "none"),
             ("fynd_preset", "none"),
         ];
@@ -299,6 +316,7 @@ mod tests {
             ("endpoint", "/v1/fail"),
             ("status", expected_status.as_str()),
             ("user_identity", "unknown"),
+            ("client_version", "unknown"),
             ("fynd_version", "none"),
             ("fynd_preset", "none"),
         ];
