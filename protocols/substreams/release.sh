@@ -86,7 +86,7 @@ for yaml_file in "${yaml_files[@]}"; do
         exit 1
     fi
 
-    REPOSITORY=${REPOSITORY:-"s3://repo.propellerheads/substreams"}
+    REPOSITORY=${REPOSITORY:-"s3://repo.propellerheads-propellerheads/substreams"}
     repository_path="$REPOSITORY/$package/$version_prefix-$version.spkg"
     bucket_and_key="${repository_path#s3://}"
 

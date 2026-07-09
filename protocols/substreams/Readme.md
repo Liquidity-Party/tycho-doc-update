@@ -17,7 +17,7 @@ does not trigger anything — the workflow must be dispatched by hand.
    name (e.g. `ethereum-curve`) as the `package` input.
 
 The build errors if the tag version does not match the package's `Cargo.toml` version.
-The spkg lands at `s3://repo.propellerheads/substreams/<package>/<package>-v<version>.spkg`.
+The spkg lands at `s3://repo.propellerheads-propellerheads/substreams/<package>/<package>-v<version>.spkg`.
 
 Releases are immutable: the upload is an S3 conditional write that is rejected if the
 spkg already exists in the registry. To ship new code, bump the package version — never
