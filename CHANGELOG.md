@@ -1,3 +1,11 @@
+## [0.330.2](https://github.com/propeller-heads/tycho/compare/0.330.1...0.330.2) (2026-07-09)
+
+
+### Bug Fixes
+
+* **substreams:** bump tycho-substreams to 0.8.0 in DCI packages ([547f86b](https://github.com/propeller-heads/tycho/commit/547f86bc458274fddeecf86e992e34e799204e60))
+* **substreams:** bump tycho-substreams to 0.8.0 in DCI packages ([#1175](https://github.com/propeller-heads/tycho/issues/1175)) ([5a73fad](https://github.com/propeller-heads/tycho/commit/5a73fad39d899a0c634a2aa50b14edb3cbb44d20))
+
 ## [0.330.1](https://github.com/propeller-heads/tycho/compare/0.330.0...0.330.1) (2026-07-09)
 
 
