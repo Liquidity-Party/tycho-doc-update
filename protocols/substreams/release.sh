@@ -59,7 +59,10 @@ else
 fi
 
 set -e  # Exit the script if any command fails
-cargo build --target wasm32-unknown-unknown --release -p "$package"
+# Build from inside the package directory so rustup picks up the package's own
+# rust-toolchain.toml; --locked enforces the committed Cargo.lock. Both are
+# required for reproducible wasm builds.
+(cd "$package" && cargo build --locked --target wasm32-unknown-unknown --release)
 mkdir -p ./target/spkg/
 
 # Loop through each YAML file and build the substreams package
