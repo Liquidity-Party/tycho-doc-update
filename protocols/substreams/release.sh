@@ -89,6 +89,13 @@ for yaml_file in "${yaml_files[@]}"; do
     REPOSITORY=${REPOSITORY:-"s3://repo.propellerheads/substreams"}
     repository_path="$REPOSITORY/$package/$version_prefix-$version.spkg"
 
+    # Releases are immutable: refuse to overwrite an existing spkg. Pre-releases
+    # (pre.<sha>) may be rebuilt and overwritten.
+    if [[ "$version" != pre.* ]] && aws s3 ls "$repository_path" > /dev/null 2>&1; then
+        echo "Error: $repository_path already exists. Releases are immutable; bump the package version instead."
+        exit 1
+    fi
+
     substreams pack "$yaml_file" -o ./target/spkg/$version_prefix-$version.spkg
     aws s3 cp ./target/spkg/$version_prefix-$version.spkg $repository_path
 
