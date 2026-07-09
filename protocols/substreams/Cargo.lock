@@ -1021,7 +1021,7 @@ dependencies = [
 
 [[package]]
 name = "ethereum-sfrax"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "ethabi 17.2.0",
@@ -1039,7 +1039,7 @@ dependencies = [
 
 [[package]]
 name = "ethereum-sfraxeth"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "ethabi 17.2.0",
