@@ -1,3 +1,36 @@
+## [0.329.1](https://github.com/propeller-heads/tycho/compare/0.329.0...0.329.1) (2026-07-09)
+
+
+### Bug Fixes
+
+* **metric:** params-encode oracle update args, default Ethereum to RetryOnRevert ([b1b9325](https://github.com/propeller-heads/tycho/commit/b1b9325d676b8167da14b2226c0f7ff303742b28))
+* **metric:** params-encode oracle update args, default Ethereum to RetryOnRevert ([#1170](https://github.com/propeller-heads/tycho/issues/1170)) ([fba1c75](https://github.com/propeller-heads/tycho/commit/fba1c75ecbf0a98c24adc1f6e84d6c50e9edef42))
+
+## [0.329.0](https://github.com/propeller-heads/tycho/compare/0.328.1...0.329.0) (2026-07-09)
+
+
+### Features
+
+* add --no-tls flag to tycho-integration-test ([84ecd21](https://github.com/propeller-heads/tycho/commit/84ecd212969a71e73e4c2439e80c7a5b6fde852f))
+* add --no-tls flag to tycho-integration-test ([#1163](https://github.com/propeller-heads/tycho/issues/1163)) ([9ec41dd](https://github.com/propeller-heads/tycho/commit/9ec41ddfda623b49ee18abe93ee1beaa68d1d759))
+
+## [0.328.1](https://github.com/propeller-heads/tycho/compare/0.328.0...0.328.1) (2026-07-08)
+
+
+### Bug Fixes
+
+* **simulation:** exclude Angstrom pools when ANGSTROM_API_KEY is unset ([2e98e80](https://github.com/propeller-heads/tycho/commit/2e98e8064eebe6e7a9511cc88d0a309003303caf))
+* **simulation:** exclude Angstrom pools when ANGSTROM_API_KEY is unset ([#1166](https://github.com/propeller-heads/tycho/issues/1166)) ([6e4c8e4](https://github.com/propeller-heads/tycho/commit/6e4c8e4f8b350d5e6a73d529ffdb5079883c386d))
+
+## [0.328.0](https://github.com/propeller-heads/tycho/compare/0.327.0...0.328.0) (2026-07-08)
+
+
+### Features
+
+* support Bebop router contract in BebopExecutor ([1fa99f8](https://github.com/propeller-heads/tycho/commit/1fa99f8574507ecbabed215c0f0f06850e68b25d))
+* support Bebop router contract in BebopExecutor ([#1150](https://github.com/propeller-heads/tycho/issues/1150)) ([073f808](https://github.com/propeller-heads/tycho/commit/073f80803a6e5f5231d29f7302ac81aff6bb45fd))
+* update bebop executor address ([4af6d02](https://github.com/propeller-heads/tycho/commit/4af6d0273b085433c9d1df2c01a84fc0bc1497f7))
+
 ## [0.327.0](https://github.com/propeller-heads/tycho/compare/0.326.0...0.327.0) (2026-07-07)
 
 
