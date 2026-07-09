@@ -11,8 +11,7 @@ on:
         description: "Package to build and release"
       config_file:
         required: false
-        description: "Name of the substreams configuration file"
-        default: "substreams"
+        description: "Manifest name without .yaml extension; leave empty to auto-discover the package's manifests"
 
 permissions:
   contents: read
