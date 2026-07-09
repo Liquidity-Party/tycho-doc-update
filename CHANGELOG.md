@@ -1,3 +1,11 @@
+## [0.330.0](https://github.com/propeller-heads/tycho/compare/0.329.1...0.330.0) (2026-07-09)
+
+
+### Features
+
+* add BopAMM registry timestamp overwrites for execution ([4f10442](https://github.com/propeller-heads/tycho/commit/4f10442ef50d5e624f6bbcd8040a4572ffe29f3a)), closes [#1101](https://github.com/propeller-heads/tycho/issues/1101)
+* add BopAMM registry timestamp overwrites for execution ([#1168](https://github.com/propeller-heads/tycho/issues/1168)) ([14cb4e8](https://github.com/propeller-heads/tycho/commit/14cb4e8bdf620581f4e988b15ee841b0ccb33076))
+
 ## [0.329.1](https://github.com/propeller-heads/tycho/compare/0.329.0...0.329.1) (2026-07-09)
 
 
