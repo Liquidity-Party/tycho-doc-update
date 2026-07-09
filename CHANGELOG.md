@@ -1,3 +1,11 @@
+## [0.329.1](https://github.com/propeller-heads/tycho/compare/0.329.0...0.329.1) (2026-07-09)
+
+
+### Bug Fixes
+
+* **metric:** params-encode oracle update args, default Ethereum to RetryOnRevert ([b1b9325](https://github.com/propeller-heads/tycho/commit/b1b9325d676b8167da14b2226c0f7ff303742b28))
+* **metric:** params-encode oracle update args, default Ethereum to RetryOnRevert ([#1170](https://github.com/propeller-heads/tycho/issues/1170)) ([fba1c75](https://github.com/propeller-heads/tycho/commit/fba1c75ecbf0a98c24adc1f6e84d6c50e9edef42))
+
 ## [0.329.0](https://github.com/propeller-heads/tycho/compare/0.328.1...0.329.0) (2026-07-09)
 
 
