@@ -88,16 +88,26 @@ for yaml_file in "${yaml_files[@]}"; do
 
     REPOSITORY=${REPOSITORY:-"s3://repo.propellerheads/substreams"}
     repository_path="$REPOSITORY/$package/$version_prefix-$version.spkg"
-
-    # Releases are immutable: refuse to overwrite an existing spkg. Pre-releases
-    # (pre.<sha>) may be rebuilt and overwritten.
-    if [[ "$version" != pre.* ]] && aws s3 ls "$repository_path" > /dev/null 2>&1; then
-        echo "Error: $repository_path already exists. Releases are immutable; bump the package version instead."
-        exit 1
-    fi
+    bucket_and_key="${repository_path#s3://}"
 
     substreams pack "$yaml_file" -o ./target/spkg/$version_prefix-$version.spkg
-    aws s3 cp ./target/spkg/$version_prefix-$version.spkg $repository_path
+
+    if [[ "$version" == pre.* ]]; then
+        # Pre-releases are keyed by commit sha and may be rebuilt and overwritten.
+        aws s3 cp "./target/spkg/$version_prefix-$version.spkg" "$repository_path"
+    else
+        # Releases are immutable: the conditional write makes S3 reject the upload
+        # atomically if the object already exists. Requires AWS CLI >= 2.17 and
+        # only s3:PutObject permission.
+        if ! aws s3api put-object \
+            --bucket "${bucket_and_key%%/*}" \
+            --key "${bucket_and_key#*/}" \
+            --body "./target/spkg/$version_prefix-$version.spkg" \
+            --if-none-match '*' > /dev/null; then
+            echo "Error: upload rejected. A PreconditionFailed error above means $repository_path already exists — releases are immutable, bump the package version instead."
+            exit 1
+        fi
+    fi
 
     echo "RELEASED SUBSTREAMS PACKAGE: '$repository_path'"
 done
