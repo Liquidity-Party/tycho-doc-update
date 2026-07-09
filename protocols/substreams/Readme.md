@@ -13,8 +13,9 @@ does not trigger anything — the workflow must be dispatched by hand.
 1. Bump the package version in its `Cargo.toml` and add a `CHANGELOG.md` entry, merge to `main`.
 2. Tag the merge commit with the package name and version, e.g.
    `git tag ethereum-curve-0.3.8 && git push origin ethereum-curve-0.3.8`.
-3. Dispatch the **Release Substreams** workflow with the tag as the ref and the package
-   name (e.g. `ethereum-curve`) as the `package` input.
+3. Dispatch the **Release Substreams** workflow with the tag as the ref, the package
+   name (e.g. `ethereum-curve`) as the `package` input, and the manifest name without
+   the `.yaml` extension (e.g. `ethereum-curve`) as the `config_file` input.
 
 The build errors if the tag version does not match the package's `Cargo.toml` version.
 The spkg lands at `s3://repo.propellerheads-propellerheads/substreams/<package>/<package>-v<version>.spkg`.
@@ -31,11 +32,11 @@ This publishes `<package>-pre.<short-sha>.spkg`, which you can use to test in de
 
 ### Packages with multiple manifests
 
-For packages that ship several manifests (e.g. forked protocols), pass the manifest name
-via the `config_file` input, e.g. `ethereum-pancakeswap` for
-`ethereum-uniswap-v2/ethereum-pancakeswap.yaml`. Without it, every manifest in the package
-directory matching the chain name (or `substreams.yaml`) is packed, and each spkg is named
-after its manifest.
+The `config_file` input names the single manifest to pack, e.g. `ethereum-pancakeswap`
+for `ethereum-uniswap-v2/ethereum-pancakeswap.yaml`. Packages that ship several manifests
+(e.g. forked protocols) need one dispatch per manifest. When run locally without a
+manifest argument, `release.sh` auto-discovers every manifest in the package directory
+matching the chain name (or `substreams.yaml`) — CI keeps the input explicit for now.
 
 ### Reproducibility
 

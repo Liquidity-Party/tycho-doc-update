@@ -10,8 +10,8 @@ on:
         required: true
         description: "Package to build and release"
       config_file:
-        required: false
-        description: "Manifest name without .yaml extension; leave empty to auto-discover the package's manifests"
+        required: true
+        description: "Manifest name without .yaml extension, e.g. ethereum-pancakeswap for ethereum-uniswap-v2/ethereum-pancakeswap.yaml"
 
 permissions:
   contents: read
