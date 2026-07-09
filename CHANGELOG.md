@@ -1,3 +1,11 @@
+## [0.329.0](https://github.com/propeller-heads/tycho/compare/0.328.1...0.329.0) (2026-07-09)
+
+
+### Features
+
+* add --no-tls flag to tycho-integration-test ([84ecd21](https://github.com/propeller-heads/tycho/commit/84ecd212969a71e73e4c2439e80c7a5b6fde852f))
+* add --no-tls flag to tycho-integration-test ([#1163](https://github.com/propeller-heads/tycho/issues/1163)) ([9ec41dd](https://github.com/propeller-heads/tycho/commit/9ec41ddfda623b49ee18abe93ee1beaa68d1d759))
+
 ## [0.328.1](https://github.com/propeller-heads/tycho/compare/0.328.0...0.328.1) (2026-07-08)
 
 
