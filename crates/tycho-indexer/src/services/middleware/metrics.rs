@@ -41,6 +41,13 @@ where
         .and_then(|v| v.to_str().ok())
         .unwrap_or("unknown")
         .to_string();
+    // Client plan from the upstream-injected X-User-Plan header (`none` when absent).
+    let user_plan = req
+        .headers()
+        .get("x-user-plan")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("none")
+        .to_string();
 
     let metadata = client_metadata::parse_client_metadata(
         req.headers()
@@ -54,6 +61,7 @@ where
         Label::new("endpoint", endpoint.clone()),
         Label::new("user_identity", user_identity.clone()),
         Label::new("client_version", client_version.clone()),
+        Label::new("user_plan", user_plan.clone()),
     ];
     request_labels.extend(metadata_labels.iter().cloned());
     counter!("rpc_requests", request_labels).increment(1);
@@ -74,6 +82,7 @@ where
                     Label::new("status", srv_res.status().as_u16().to_string()),
                     Label::new("user_identity", user_identity.clone()),
                     Label::new("client_version", client_version.clone()),
+                    Label::new("user_plan", user_plan.clone()),
                 ];
                 fail_labels.extend(metadata_labels.iter().cloned());
                 counter!("rpc_requests_failed", fail_labels).increment(1);
@@ -90,6 +99,7 @@ where
                 Label::new("status", status.to_string()),
                 Label::new("user_identity", user_identity.clone()),
                 Label::new("client_version", client_version.clone()),
+                Label::new("user_plan", user_plan.clone()),
             ];
             fail_labels.extend(metadata_labels.iter().cloned());
             counter!("rpc_requests_failed", fail_labels).increment(1);
@@ -214,6 +224,7 @@ mod tests {
             ("endpoint", "/v1/health"),
             ("user_identity", "alice"),
             ("client_version", "unknown"),
+            ("user_plan", "none"),
             ("fynd_version", "none"),
             ("fynd_preset", "none"),
         ];
@@ -228,6 +239,7 @@ mod tests {
             ("status", "400"),
             ("user_identity", "alice"),
             ("client_version", "unknown"),
+            ("user_plan", "none"),
             ("fynd_version", "none"),
             ("fynd_preset", "none"),
         ];
@@ -252,6 +264,7 @@ mod tests {
             .uri("/v1/health")
             .insert_header(("user-identity", "alice"))
             .insert_header(("user-agent", "tycho-client-1.0"))
+            .insert_header(("x-user-plan", "pro"))
             .insert_header((
                 "x-tycho-client-metadata",
                 "fynd_version=1.2.3; fynd_preset=fast; secret=xyz",
@@ -266,6 +279,7 @@ mod tests {
             ("endpoint", "/v1/health"),
             ("user_identity", "alice"),
             ("client_version", "tycho-client-1.0"),
+            ("user_plan", "pro"),
             ("fynd_version", "1.2.3"),
             ("fynd_preset", "fast"),
         ];
@@ -279,6 +293,7 @@ mod tests {
             ("endpoint", "/v1/health"),
             ("user_identity", "alice"),
             ("client_version", "tycho-client-1.0"),
+            ("user_plan", "pro"),
             ("fynd_version", "1.2.3"),
             ("fynd_preset", "fast"),
             ("secret", "xyz"),
@@ -303,6 +318,7 @@ mod tests {
             ("endpoint", "/v1/fail"),
             ("user_identity", "unknown"),
             ("client_version", "unknown"),
+            ("user_plan", "none"),
             ("fynd_version", "none"),
             ("fynd_preset", "none"),
         ];
@@ -317,6 +333,7 @@ mod tests {
             ("status", expected_status.as_str()),
             ("user_identity", "unknown"),
             ("client_version", "unknown"),
+            ("user_plan", "none"),
             ("fynd_version", "none"),
             ("fynd_preset", "none"),
         ];

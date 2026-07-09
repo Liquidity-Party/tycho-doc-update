@@ -63,6 +63,8 @@ pub struct WsActor {
     compression_enabled: HashMap<Uuid, bool>,
     user_identity: Option<String>,
     client_version: String,
+    /// Client plan from the X-User-Plan header, projected onto connection metrics.
+    user_plan: String,
     /// Allowlisted client metadata projected onto connection metrics.
     client_metadata: HashMap<String, String>,
 }
@@ -72,6 +74,7 @@ impl WsActor {
         app_state: web::Data<WsData>,
         user_identity: Option<String>,
         client_version: String,
+        user_plan: String,
         client_metadata: HashMap<String, String>,
     ) -> Self {
         Self {
@@ -82,6 +85,7 @@ impl WsActor {
             compression_enabled: HashMap::new(),
             user_identity,
             client_version,
+            user_plan,
             client_metadata,
         }
     }
@@ -98,6 +102,7 @@ impl WsActor {
                     .to_owned(),
             ),
             Label::new("client_version", self.client_version.clone()),
+            Label::new("user_plan", self.user_plan.clone()),
         ];
         labels.extend(client_metadata::metric_labels(&self.client_metadata));
         labels
@@ -126,6 +131,13 @@ impl WsActor {
             .unwrap_or("unknown")
             .to_string();
 
+        let user_plan = req
+            .headers()
+            .get("x-user-plan")
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("none")
+            .to_string();
+
         let client_metadata = client_metadata::parse_client_metadata(
             req.headers()
                 .get(client_metadata::CLIENT_METADATA_HEADER)
@@ -133,7 +145,8 @@ impl WsActor {
                 .unwrap_or(""),
         );
 
-        let ws_actor = WsActor::new(data, user_identity, client_version, client_metadata);
+        let ws_actor =
+            WsActor::new(data, user_identity, client_version, user_plan, client_metadata);
 
         ws::start(ws_actor, &req, stream)
     }
