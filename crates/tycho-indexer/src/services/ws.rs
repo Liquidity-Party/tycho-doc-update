@@ -1,6 +1,6 @@
 //! This module contains Tycho Websocket implementation
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::HashMap,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -64,7 +64,7 @@ pub struct WsActor {
     user_identity: Option<String>,
     client_version: String,
     /// Allowlisted client metadata projected onto connection metrics.
-    client_metadata: BTreeMap<String, String>,
+    client_metadata: HashMap<String, String>,
 }
 
 impl WsActor {
@@ -72,7 +72,7 @@ impl WsActor {
         app_state: web::Data<WsData>,
         user_identity: Option<String>,
         client_version: String,
-        client_metadata: BTreeMap<String, String>,
+        client_metadata: HashMap<String, String>,
     ) -> Self {
         Self {
             id: Uuid::new_v4(),

@@ -11,7 +11,7 @@
 //! This mirrors the client serializer in `tycho-client` but deliberately does not depend on that
 //! crate, so the two can ship independently.
 
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 use metrics::Label;
 
@@ -32,8 +32,8 @@ const MAX_HEADER_BYTES: usize = 1024;
 /// Parses the raw header into a metadata map, applying defensive caps. Oversized input is dropped
 /// rather than trusted: a header over the total-length cap yields an empty map, and individual
 /// pairs over the key/value caps or beyond the entry cap are skipped.
-pub(in crate::services) fn parse_client_metadata(raw: &str) -> BTreeMap<String, String> {
-    let mut out = BTreeMap::new();
+pub(in crate::services) fn parse_client_metadata(raw: &str) -> HashMap<String, String> {
+    let mut out = HashMap::new();
     if raw.len() > MAX_HEADER_BYTES {
         return out;
     }
@@ -60,7 +60,7 @@ pub(in crate::services) fn parse_client_metadata(raw: &str) -> BTreeMap<String, 
 /// Builds the Prometheus labels for every allowlisted metadata key, in allowlist order. Missing
 /// keys yield `"none"`; present values are emitted verbatim (already size-capped by the parser).
 /// Non-allowlisted keys are never emitted.
-pub(in crate::services) fn metric_labels(metadata: &BTreeMap<String, String>) -> Vec<Label> {
+pub(in crate::services) fn metric_labels(metadata: &HashMap<String, String>) -> Vec<Label> {
     METADATA_METRIC_KEYS
         .iter()
         .map(|&key| {
@@ -78,14 +78,14 @@ pub(in crate::services) fn metric_labels(metadata: &BTreeMap<String, String>) ->
 mod tests {
     use super::*;
 
-    fn labels_map(metadata: &BTreeMap<String, String>) -> BTreeMap<String, String> {
+    fn labels_map(metadata: &HashMap<String, String>) -> HashMap<String, String> {
         metric_labels(metadata)
             .into_iter()
             .map(|l| (l.key().to_string(), l.value().to_string()))
             .collect()
     }
 
-    fn map(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
+    fn map(pairs: &[(&str, &str)]) -> HashMap<String, String> {
         pairs
             .iter()
             .map(|(k, v)| (k.to_string(), v.to_string()))
@@ -129,7 +129,7 @@ mod tests {
 
     #[test]
     fn labels_default_to_none_when_absent() {
-        let labels = labels_map(&BTreeMap::new());
+        let labels = labels_map(&HashMap::new());
         assert_eq!(labels, map(&[("fynd_version", "none"), ("fynd_preset", "none")]));
     }
 
