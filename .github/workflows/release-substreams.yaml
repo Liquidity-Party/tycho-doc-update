@@ -42,14 +42,25 @@ jobs:
 
       - name: Publish substreams-helper
         working-directory: protocols/substreams
-        run: cargo publish -p substreams-helper --locked --token ${{ secrets.CRATESIO_REGISTRY_TOKEN }}
-
-      - name: Wait for crates.io to index substreams-helper
-        run: sleep 30
+        run: |
+          version=$(grep -m1 '^version' crates/substreams-helper/Cargo.toml | cut -d'"' -f2)
+          if curl -sSf -A "tycho-release-ci" "https://crates.io/api/v1/crates/substreams-helper/${version}" > /dev/null; then
+            echo "substreams-helper ${version} is already on crates.io, skipping publish"
+          else
+            cargo publish -p substreams-helper --locked --token ${{ secrets.CRATESIO_REGISTRY_TOKEN }}
+            echo "Waiting for crates.io to index substreams-helper"
+            sleep 30
+          fi
 
       - name: Publish tycho-substreams
         working-directory: protocols/substreams
-        run: cargo publish -p tycho-substreams --locked --token ${{ secrets.CRATESIO_REGISTRY_TOKEN }}
+        run: |
+          version=$(grep -m1 '^version' crates/tycho-substreams/Cargo.toml | cut -d'"' -f2)
+          if curl -sSf -A "tycho-release-ci" "https://crates.io/api/v1/crates/tycho-substreams/${version}" > /dev/null; then
+            echo "tycho-substreams ${version} is already on crates.io, skipping publish"
+          else
+            cargo publish -p tycho-substreams --locked --token ${{ secrets.CRATESIO_REGISTRY_TOKEN }}
+          fi
 
   release-substreams-package:
     name: Release ${{ inputs.package }} substreams package
