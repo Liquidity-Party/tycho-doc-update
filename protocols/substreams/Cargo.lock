@@ -288,8 +288,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "base-aerodrome-v1"
+version = "0.1.2"
+dependencies = [
+ "anyhow",
+ "ethabi 18.0.0",
+ "getrandom 0.2.17",
+ "itertools 0.12.1",
+ "num-bigint",
+ "serde",
+ "serde_qs 0.13.0",
+ "substreams 0.5.22",
+ "substreams-ethereum 0.9.13",
+ "substreams-helper 0.0.2 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=b8aeaa3)",
+ "tycho-substreams 0.2.0 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=b8aeaa3)",
+]
+
+[[package]]
 name = "base-lunarbase"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "ethabi 18.0.0",
@@ -773,7 +790,7 @@ dependencies = [
 
 [[package]]
 name = "ethereum-balancer-v3"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "anyhow",
  "ethabi 18.0.0",
@@ -845,7 +862,7 @@ dependencies = [
 
 [[package]]
 name = "ethereum-ekubo-v2"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "ethabi 18.0.0",
@@ -864,7 +881,7 @@ dependencies = [
 
 [[package]]
 name = "ethereum-ekubo-v3"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "alloy-primitives",
  "anyhow",
@@ -954,7 +971,7 @@ dependencies = [
 
 [[package]]
 name = "ethereum-liquidityparty"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "ethabi 18.0.0",
@@ -1021,7 +1038,7 @@ dependencies = [
 
 [[package]]
 name = "ethereum-sfrax"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "ethabi 17.2.0",
@@ -1039,7 +1056,7 @@ dependencies = [
 
 [[package]]
 name = "ethereum-sfraxeth"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "ethabi 17.2.0",
