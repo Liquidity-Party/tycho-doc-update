@@ -1,3 +1,15 @@
+## [0.332.0](https://github.com/propeller-heads/tycho/compare/0.331.1...0.332.0) (2026-07-10)
+
+
+### Features
+
+* add client_version label to rpc metrics ([934e72c](https://github.com/propeller-heads/tycho/commit/934e72c6f822e85c2cdcdb5f69372ba08199805e))
+* add server-side client-metadata parser and label allowlist ([6aef08f](https://github.com/propeller-heads/tycho/commit/6aef08fd8ba60669802bff9cf3572013da601fbf))
+* add user_plan label to client telemetry metrics ([cb689eb](https://github.com/propeller-heads/tycho/commit/cb689eb2dc4393e8aa39dac86be376c09365ece9))
+* label rpc metrics with allowlisted client metadata ([49a270c](https://github.com/propeller-heads/tycho/commit/49a270c1b4a64b9987736de9e9839629e70369e3))
+* label websocket connection metric with client metadata ([24607f0](https://github.com/propeller-heads/tycho/commit/24607f0a2287cc457d68012098180ae16701a291))
+* **tycho-indexer:** capture client metadata into Prometheus labels ([#1183](https://github.com/propeller-heads/tycho/issues/1183)) ([90cdc72](https://github.com/propeller-heads/tycho/commit/90cdc72a7175f4ad7eaa3304c52475a8de9d9f0b))
+
 ## [0.331.1](https://github.com/propeller-heads/tycho/compare/0.331.0...0.331.1) (2026-07-10)
 
 
