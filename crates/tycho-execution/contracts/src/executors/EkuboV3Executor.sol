@@ -185,8 +185,7 @@ contract EkuboV3Executor is IExecutor, ICallback {
     }
 
     function getCallbackTransferData(
-        bytes calldata,
-        /* data */
+        bytes calldata, /* data */
         address tokenIn,
         address /* caller */
     )
