@@ -1,3 +1,25 @@
+## [0.331.0](https://github.com/propeller-heads/tycho/compare/0.330.2...0.331.0) (2026-07-09)
+
+
+### Features
+
+* add client_metadata builder to TychoStreamBuilder ([ca1b2e5](https://github.com/propeller-heads/tycho/commit/ca1b2e579e521ff3e67beac9d52aec0dcf93d9fb))
+* add generic client-metadata serializer to tycho-client ([7c0a05f](https://github.com/propeller-heads/tycho/commit/7c0a05fd94545220b988a7e7109a486d8898c21f))
+* drop invalid client metadata with a warning instead of failing build ([19bae06](https://github.com/propeller-heads/tycho/commit/19bae0616519685cd39b3c584a856dc0df36c7f8))
+* enforce size caps on client metadata ([ddeb5d0](https://github.com/propeller-heads/tycho/commit/ddeb5d0dbfd14312d1b26a83d54d1ca3061bc595))
+* forward client metadata through ProtocolStreamBuilder ([ef045e7](https://github.com/propeller-heads/tycho/commit/ef045e7f44d0200cf7f9b29beb8c39d38e003dab))
+* merge client metadata setters into add_client_metadata ([368647f](https://github.com/propeller-heads/tycho/commit/368647f45fb3092effcf0c8be33fefa5b9c87902))
+* send client-metadata header from HttpRPCClient ([5a23e5b](https://github.com/propeller-heads/tycho/commit/5a23e5b24657463c83c1a19eb05a8d1a055d6751))
+* send client-metadata header from WsDeltasClient handshake ([e489a8b](https://github.com/propeller-heads/tycho/commit/e489a8bc1bdd62c9e55442a0b5875a5fe9923a4c))
+* **tycho-client:** send generic client metadata header ([#1151](https://github.com/propeller-heads/tycho/issues/1151)) ([1f73084](https://github.com/propeller-heads/tycho/commit/1f73084cc51cd0ffd2406c1bbf39a058dec7f66a))
+* use HashMap for client metadata, sort keys on serialize ([6b450ac](https://github.com/propeller-heads/tycho/commit/6b450acba0fbfda64d0af10b8488c37437710390))
+
+
+### Bug Fixes
+
+* harden client metadata visibility ([025e624](https://github.com/propeller-heads/tycho/commit/025e624cdd0b0dc7ea1c60f44f895a4fcfbd7814))
+* remove unnecessary space ([44f944a](https://github.com/propeller-heads/tycho/commit/44f944a31757eb29b6627beaed21b61c9e55146b))
+
 ## [0.330.2](https://github.com/propeller-heads/tycho/compare/0.330.1...0.330.2) (2026-07-09)
 
 
