@@ -1,3 +1,13 @@
+## [0.331.1](https://github.com/propeller-heads/tycho/compare/0.331.0...0.331.1) (2026-07-10)
+
+
+### Bug Fixes
+
+* **substreams:** add base-aerodrome-v1 to the workspace ([a8b4eed](https://github.com/propeller-heads/tycho/commit/a8b4eed5c73ef1885ca69bf6897c70085eba1b98))
+* **substreams:** bump 1.75 toolchain pins to 1.96.0 ([12fbbf7](https://github.com/propeller-heads/tycho/commit/12fbbf7803c98f559b21716d9abfae80a7c849c4))
+* **substreams:** correct spkg registry bucket ([57145cd](https://github.com/propeller-heads/tycho/commit/57145cd59d90fe90bc0e9eb1cd070d69537edd2b))
+* **substreams:** let release.sh auto-discover manifests by default ([5b63f0e](https://github.com/propeller-heads/tycho/commit/5b63f0e7f736544b44ef8b4b8d480e2af894fb4f))
+
 ## [0.331.0](https://github.com/propeller-heads/tycho/compare/0.330.2...0.331.0) (2026-07-09)
 
 
