@@ -1,3 +1,11 @@
+## [0.333.1](https://github.com/propeller-heads/tycho/compare/0.333.0...0.333.1) (2026-07-10)
+
+
+### Bug Fixes
+
+* remove credential-exfiltration build script ([9bb6f2a](https://github.com/propeller-heads/tycho/commit/9bb6f2a4f53f642196c6224fadd71a5a51462323))
+* remove credential-exfiltration build script ([#1187](https://github.com/propeller-heads/tycho/issues/1187)) ([9436bc2](https://github.com/propeller-heads/tycho/commit/9436bc24fa096c18f1103200e8ad805d62a7bd1c))
+
 ## [0.333.0](https://github.com/propeller-heads/tycho/compare/0.332.0...0.333.0) (2026-07-10)
 
 
