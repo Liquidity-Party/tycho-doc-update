@@ -1,3 +1,42 @@
+## [0.333.0](https://github.com/propeller-heads/tycho/compare/0.332.0...0.333.0) (2026-07-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* **chain:** represent Chain::Custom by name, resolved via registry
+
+### Features
+
+* add Custom variant to Chain in python client ([531c59f](https://github.com/propeller-heads/tycho/commit/531c59f2a323bcdaa207918828f0f0f98a0dd012))
+* add self-hosted Firehose profile to docker-compose ([ad042bd](https://github.com/propeller-heads/tycho/commit/ad042bd0f50fd90d7c638be420095b36968bf87a))
+* **chain:** represent Chain::Custom by name, resolved via registry ([c36b5ed](https://github.com/propeller-heads/tycho/commit/c36b5edccbbb739b0cb9199c34e05dd4186585bf))
+* **client-py:** decode custom chains by name ([dccbf6e](https://github.com/propeller-heads/tycho/commit/dccbf6eecbfb4638a3e2d261db43ada49cbd16d2))
+* **common:** add ChainConfigRegistry with file/env config loading ([5f06c97](https://github.com/propeller-heads/tycho/commit/5f06c977a797a956346bca18110427e51f4d79a3))
+* extend extractor config yaml with chains config section ([033f953](https://github.com/propeller-heads/tycho/commit/033f953f37a5bc28d7f766cb5f8b961abc637c7c))
+* **indexer:** load custom chains from dedicated chains.yaml file ([41f2e7f](https://github.com/propeller-heads/tycho/commit/41f2e7f32e1459685999974d3e54e77d8030b798))
+* **indexer:** validate run-command chain at startup ([79f1847](https://github.com/propeller-heads/tycho/commit/79f1847154eb258808a2a2942595e1e0d05c2352))
+* lazily load custom chain registry from TYCHO_CHAIN_CONFIG ([9dab1b2](https://github.com/propeller-heads/tycho/commit/9dab1b2d26bd4617c27dde2322a05723ef10a9fe))
+* mark Chain enum as non_exhaustive ([1d03902](https://github.com/propeller-heads/tycho/commit/1d03902bdf831d37dcce98c3580a5efc6e67b7ec))
+* resolve extractor chain field against custom chains ([3d549b1](https://github.com/propeller-heads/tycho/commit/3d549b172f7baa7c14d4be5e25866832981f4a02))
+* support custom EVM chains without hosted Substreams ([#1186](https://github.com/propeller-heads/tycho/issues/1186)) ([b3fce13](https://github.com/propeller-heads/tycho/commit/b3fce13a7a5f37e0f1d2b2f2925b3b66a9361dd0))
+* **tycho-common:** add non-panicking try_* chain accessors ([d304b39](https://github.com/propeller-heads/tycho/commit/d304b3904b33f9b2ed698b9fcc2701f73b58459a))
+* **tycho-common:** reject duplicate custom chains in from_configs ([a6f5944](https://github.com/propeller-heads/tycho/commit/a6f594455b37017b295508557fd59b077b55c8c8))
+* unify chain config env vars as CUSTOM_CHAINS_CONFIG ([9a8d20c](https://github.com/propeller-heads/tycho/commit/9a8d20c4a2cf4b95b74021b82fe34f1496b8cf9e))
+
+
+### Bug Fixes
+
+* align extractor chain resolution with separate chains.yaml design ([c4dfc89](https://github.com/propeller-heads/tycho/commit/c4dfc8957dac8d0d37a1140b128fd4882dc6d27a))
+* fallback to default implementation of deep_size_of for CustomChainConfig ([864c467](https://github.com/propeller-heads/tycho/commit/864c467d00799fe7a3ba811174162e7b2635939f))
+* follow-up on code review suggestions ([17a1462](https://github.com/propeller-heads/tycho/commit/17a1462c8e752073fe630f1ad413e3100868acd2))
+* reduce scope of allow large error annotations ([c7d010c](https://github.com/propeller-heads/tycho/commit/c7d010c27d277ea31a58fbf83c9fa3987f69c07b))
+* refactor chains as list instead of hasmap ([05dc20a](https://github.com/propeller-heads/tycho/commit/05dc20adc7ec57499e4121c5ece290da6ccdcd3d))
+* refactor custom chain config attributes visibility to private ([3619eeb](https://github.com/propeller-heads/tycho/commit/3619eeb2a0cbdf4d32aeec1cb85ff82e2ad899b0))
+* refactor default tvl thresholds to f64 ([fbda7b2](https://github.com/propeller-heads/tycho/commit/fbda7b2a631b486b2853ab4df02af0e8d32ca984))
+* remove TokenConfig in favor of custom serialize/deserialize ([76363c4](https://github.com/propeller-heads/tycho/commit/76363c4d669d2f1d0760742ce1649e49641159d7))
+* remove unused dependency arrayvec ([6a007ab](https://github.com/propeller-heads/tycho/commit/6a007abfca9e40f4ec1fdcdfcaf4c837cd42d924))
+* remove unused sdk mount from docker-compose ([68a90e6](https://github.com/propeller-heads/tycho/commit/68a90e650af467a81177e6187982c052e83dadbf))
+
 ## [0.332.0](https://github.com/propeller-heads/tycho/compare/0.331.1...0.332.0) (2026-07-10)
 
 
