@@ -10,7 +10,10 @@ use tokio::{sync::mpsc::Receiver, task::JoinHandle};
 use tracing::{info, warn};
 use tycho_common::{
     dto::{PaginationLimits, ProtocolSystemsRequestBody},
-    models::{Chain, ExtractorIdentity},
+    models::{
+        chain_config::{init_chain_registry, ChainConfigRegistry},
+        Chain, ExtractorIdentity,
+    },
 };
 
 use crate::{
@@ -52,6 +55,19 @@ impl RetryConfiguration {
 pub struct ConstantRetryConfiguration {
     max_attempts: u64,
     cooldown: Duration,
+}
+
+/// Loads and validates the custom-chain config once, before the stream starts. A missing or
+/// malformed `TYCHO_CHAINS_CONFIG` fails here with an actionable error, rather than degrading to
+/// an empty registry and resurfacing later as a confusing unknown-chain error mid-stream. An unset
+/// env var yields an empty registry (Ok), so built-in-only consumers are unaffected. The validated
+/// registry is best-effort installed as the process-wide one; a prior lazy access may already have
+/// initialised it, in which case the install is a no-op.
+fn validate_chain_config() -> Result<(), StreamError> {
+    let registry = ChainConfigRegistry::load_default()
+        .map_err(|e| StreamError::SetUpError(format!("failed to load custom chain config: {e}")))?;
+    let _ = init_chain_registry(registry);
+    Ok(())
 }
 
 pub struct TychoStreamBuilder {
@@ -294,6 +310,9 @@ impl TychoStreamBuilder {
                 None
             });
 
+        // Fail fast on a broken custom-chain config, before any network I/O.
+        validate_chain_config()?;
+
         // Attempt to read the authentication key from the environment variable if not provided
         let auth_key = self
             .auth_key
@@ -513,6 +532,31 @@ impl ProtocolSystemsInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_validate_chain_config_errors_on_broken_file() {
+        // Relies on nextest process isolation: this mutates the process-global env var.
+        std::env::set_var("TYCHO_CHAINS_CONFIG", "/nonexistent/does-not-exist.yaml");
+        let result = validate_chain_config();
+        std::env::remove_var("TYCHO_CHAINS_CONFIG");
+
+        let err = result.expect_err("a missing config file must fail validation");
+        assert!(matches!(err, StreamError::SetUpError(_)));
+        assert!(
+            err.to_string()
+                .contains("custom chain config"),
+            "error should name the custom chain config: {err}"
+        );
+    }
+
+    #[test]
+    fn test_validate_chain_config_ok_when_env_unset() {
+        std::env::remove_var("TYCHO_CHAINS_CONFIG");
+        assert!(
+            validate_chain_config().is_ok(),
+            "an unset env var means no custom chains, which is valid"
+        );
+    }
 
     #[test]
     fn test_retry_configuration_constant() {
