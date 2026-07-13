@@ -85,8 +85,11 @@ contract EkuboV3ExecutorTest is Constants, TestUtils {
 
     modifier setUpFork(uint256 blockNumber) {
         vm.createSelectFork(vm.rpcUrl("mainnet"), blockNumber);
-        // Forks always use the default hardfork https://github.com/foundry-rs/foundry/issues/13040
-        // vm.setEvmVersion not exposed in forge-std 1.9.5 — use low-level cheatcode call
+        // TODO: remove once Foundry stable includes the Fusaka hardfork mapping.
+        // Forks use the chain's hardfork, not foundry.toml's evm_version.
+        // The current stable (Dec 2024) predates Fusaka (Dec 2025),
+        // so Osaka opcodes aren't enabled for post-Fusaka blocks.
+        // See: https://github.com/foundry-rs/foundry/issues/13040
         address(vm)
             .call(abi.encodeWithSignature("setEvmVersion(string)", "osaka"));
 
@@ -318,6 +321,7 @@ contract EkuboV3SignedSwapTest is Constants, TestUtils {
 
     modifier setUpFork(uint256 blockNumber) {
         vm.createSelectFork(vm.rpcUrl("mainnet"), blockNumber);
+        // TODO: remove once Foundry stable includes the Fusaka hardfork mapping.
         address(vm)
             .call(abi.encodeWithSignature("setEvmVersion(string)", "osaka"));
         _;
@@ -424,8 +428,7 @@ contract TychoRouterForEkuboV3Test is TychoRouterTestSetup {
     function setUp() public virtual override {
         super.setUp();
 
-        // Forks always use the default hardfork (foundry-rs/foundry#13040).
-        // vm.setEvmVersion not exposed in forge-std 1.9.5 — use low-level cheatcode call
+        // TODO: remove once Foundry stable includes the Fusaka hardfork mapping.
         address(vm)
             .call(abi.encodeWithSignature("setEvmVersion(string)", "osaka"));
 
