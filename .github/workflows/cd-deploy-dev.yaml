@@ -33,6 +33,7 @@ on:
           - base-tycho-indexer
           - bsc-tycho-indexer
           - unichain-tycho-indexer
+          - polygon-tycho-indexer
       cargo_profile:
         description: >
           Cargo build profile. "profiling" includes debug symbols for
